@@ -4,6 +4,7 @@ import { history } from './js/history.js';
 import { setupBTSEventListeners, setBTSState, notifyBTS } from './js/bts.js';
 import { checkAIAvailability, triggerModelDownload, cleanupAISession, prewarmWithSampleImage, startProactiveGeneration, generateAltText, prepareAISession } from './js/ai.js';
 import { handleFileSelected, showPreview, hidePreview, updateShareButtonState, handleShareClick, closeSuccessOverlay, updateGenerateButtonUI, handleSmartFallback } from './js/ui.js';
+import { handleAppShare, generateICSReminder } from './js/actions.js';
 
 function setupEventListeners() {
   window.addEventListener('beforeunload', cleanupAISession);
@@ -20,6 +21,16 @@ function setupEventListeners() {
   DOM.statusBadge.addEventListener('click', () => {
     triggerModelDownload();
   });
+
+  const footerShareBtn = document.getElementById('footer-share-btn');
+  if (footerShareBtn) {
+    footerShareBtn.addEventListener('click', handleAppShare);
+  }
+
+  const footerRemindBtn = document.getElementById('footer-remind-btn');
+  if (footerRemindBtn) {
+    footerRemindBtn.addEventListener('click', generateICSReminder);
+  }
 
   DOM.selectBtn.addEventListener('click', () => {
     DOM.imageUpload.click();
