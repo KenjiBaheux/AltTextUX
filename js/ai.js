@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { PROMPTS } from './prompts.js';
 import { history } from './history.js';
 import { notifyBTS, updateMetricsUI, startMetricsLoop, updateTemporalLatestUI } from './bts.js';
-import { typeWriterEffect, rewriteTextEffect, LoadingMessageManager } from './utils.js';
+import { typeWriterEffect, rewriteTextEffect, LoadingMessageManager, ensureImageLoaded } from './utils.js';
 import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI } from './ui.js';
 
 export async function checkAIAvailability() {
@@ -179,6 +179,13 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
   const targetImageSource = imageSrcOverride || state.currentImageSource;
   if (!targetImageSource || !state.aiAvailable) return;
 
+  try {
+    await ensureImageLoaded(targetImageSource);
+  } catch (e) {
+    console.warn("Proactive generation image source not ready", e);
+    return;
+  }
+
   // Normalize hint: if it matches the last AI output, it's not a user refinement
   const normalizedHint = (hint === state.lastGeneratedAltText) ? "" : hint;
 
@@ -300,6 +307,13 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
 export async function prewarmWithSampleImage() {
   if (!state.settings.enablePrewarming) return false;
   if (!state.aiAvailable || !DOM.sampleImageSource || state.sampleImageAltText || state.prewarmAbortController) return false;
+
+  try {
+    await ensureImageLoaded(DOM.sampleImageSource);
+  } catch (e) {
+    console.warn("Sample image failed to load for prewarming");
+    return false;
+  }
 
   const session = await prepareAISession();
   if (!session) return;
@@ -446,6 +460,12 @@ export async function generateAltText() {
       if (state.unconsumedSavings) {
         state.unconsumedSavings = null;
         updateMetricsUI();
+      }
+
+      try {
+        await ensureImageLoaded(state.currentImageSource);
+      } catch (e) {
+        throw new Error("InvalidStateError: The image source is not usable.");
       }
 
       const session = await prepareAISession();

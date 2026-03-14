@@ -2,6 +2,21 @@ import { DOM } from './dom.js';
 import { notifyBTS } from './bts.js';
 import { state } from './state.js';
 
+export async function ensureImageLoaded(imageSource) {
+  if (imageSource instanceof HTMLImageElement) {
+    if (!imageSource.complete) {
+      await new Promise((resolve, reject) => {
+        imageSource.addEventListener('load', resolve, { once: true });
+        imageSource.addEventListener('error', reject, { once: true });
+      });
+    }
+    if (imageSource.naturalWidth === 0) {
+      throw new Error("Image source is not usable (naturalWidth is 0)");
+    }
+  }
+  return true;
+}
+
 export function typeWriterEffect(text) {
   if (!state.settings.enableTransitions) {
     DOM.altTextInput.value = text;
