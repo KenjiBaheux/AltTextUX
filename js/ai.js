@@ -2,9 +2,10 @@ import { DOM } from './dom.js';
 import { state } from './state.js';
 import { PROMPTS } from './prompts.js';
 import { history } from './history.js';
-import { notifyBTS, updateMetricsUI, startMetricsLoop, updateTemporalLatestUI } from './bts.js';
+import { notifyBTS, updateTemporalLatestUI } from './bts.js';
 import { typeWriterEffect, rewriteTextEffect, LoadingMessageManager, ensureImageLoaded } from './utils.js';
-import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI } from './ui.js';
+import { recordInferenceStart, recordInferenceDuration, consumeSavings, clearUnconsumedSavings, recordLossStart, recordLossEnd } from './metrics.js';
+import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI, showProgressUI, hideProgressUI, triggerDoubleTakeAnimation, showErrorState, clearErrorState } from './ui.js';
 
 export async function checkAIAvailability() {
   if (!window.LanguageModel) {
@@ -43,10 +44,7 @@ export async function checkAIAvailability() {
         updateGenerateButtonState();
 
         // Show progress bar container immediately
-        if (DOM.progressContainer) {
-          DOM.progressContainer.classList.add('show');
-          if (DOM.progressPercent) DOM.progressPercent.textContent = '...';
-        }
+        showProgressUI();
 
         // Polling workaround for Chrome restoration bug & slow connections
         if (!state.availabilityPollInterval) {
@@ -66,11 +64,10 @@ export async function checkAIAvailability() {
                 console.log(`Chrome component update finished or bug resolved. Status is now: ${currentStatus}`);
 
                 // Force bar to 100% completion for mental model consistency before hiding
-                if (DOM.progressFill) DOM.progressFill.style.width = '100%';
-                if (DOM.progressPercent) DOM.progressPercent.textContent = '100%';
+                showProgressUI(100);
 
                 setTimeout(() => {
-                  if (DOM.progressContainer) DOM.progressContainer.classList.remove('show');
+                  hideProgressUI();
                   checkAIAvailability(); // Re-run with the properly resolved state
                 }, 500);
               }
@@ -111,9 +108,8 @@ export async function prepareAISession(forceNew = false) {
             progressEventsCount++;
             state.isModelDownloading = true; // Legitimately downloading!
 
-            if (e.loaded < e.total && DOM.progressContainer && progressEventsCount > 3) {
-              DOM.progressContainer.classList.add('show');
-              DOM.progressContainer.style.transitionDelay = '0s'; // override delay if real progress!
+            if (e.loaded < e.total && progressEventsCount > 3) {
+              showProgressUI();
 
               // Only update the label to "Downloading" if we prove we're getting real bytes
               updateStatus('downloading', 'Downloading AI Model...');
@@ -125,13 +121,12 @@ export async function prepareAISession(forceNew = false) {
                 if (container) container.classList.add('resolved');
               }
             }
-            if (DOM.progressFill && DOM.progressPercent) {
+            if (e.total) {
               const percent = e.total ? Math.round((e.loaded / e.total) * 100) : 0;
-              DOM.progressFill.style.width = `${percent}%`;
-              DOM.progressPercent.textContent = `${percent}%`;
+              showProgressUI(percent);
 
               if (percent >= 100) {
-                setTimeout(() => DOM.progressContainer && DOM.progressContainer.classList.remove('show'), 500);
+                hideProgressUI(500);
               }
             }
           });
@@ -186,8 +181,9 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
     return;
   }
 
-  // Normalize hint: if it matches the last AI output, it's not a user refinement
-  const normalizedHint = (hint === state.lastGeneratedAltText) ? "" : hint;
+  // Normalize hint: if the current text is an AI entry, it's not a user refinement
+  const currentEntry = history.stack[history.currentIndex];
+  const normalizedHint = (currentEntry && currentEntry.isAI && hint === currentEntry.text) ? "" : hint;
 
   // OPTIMIZATION: In-Flight Prewarm Adoption
   if (state.prewarmPromise && targetImageSource === DOM.sampleImageSource && normalizedHint === "") {
@@ -265,19 +261,13 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
   notifyBTS(btsType, 'start');
 
   const metricType = isProactive2 ? 'proactive2' : 'proactive';
-  state.inferenceStartTimes.set(metricType, performance.now());
-  state.unconsumedSavings = { type: metricType, startTime: state.inferenceStartTimes.get(metricType), duration: null };
-  startMetricsLoop();
+  recordInferenceStart(metricType);
 
   state.activeInferencePromise = (async () => {
     try {
       const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal: state.inferenceAbortController.signal });
       const duration = performance.now() - state.inferenceStartTimes.get(metricType);
-      state.inferenceDurations.set(metricType, duration);
-      if (state.unconsumedSavings && state.unconsumedSavings.type === metricType) {
-        state.unconsumedSavings.duration = duration;
-      }
-      updateMetricsUI();
+      recordInferenceDuration(metricType, duration);
       
       state.cachedAltText = result;
       state.cachedHint = normalizedHint;
@@ -290,8 +280,7 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
         console.error("Proactive generation failed:", error);
       }
       if (state.unconsumedSavings && state.unconsumedSavings.type === metricType && !state.unconsumedSavings.duration) {
-        state.unconsumedSavings = null;
-        updateMetricsUI();
+        clearUnconsumedSavings();
       }
       throw error;
     } finally {
@@ -329,19 +318,13 @@ export async function prewarmWithSampleImage() {
     { type: "text", value: PROMPTS.USER_DEFAULT }
   ];
 
-  state.inferenceStartTimes.set('prewarm', performance.now());
-  state.unconsumedSavings = { type: 'prewarm', startTime: state.inferenceStartTimes.get('prewarm'), duration: null };
-  startMetricsLoop();
+  recordInferenceStart('prewarm');
 
   state.prewarmPromise = (async () => {
     try {
       const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal: state.prewarmAbortController.signal });
       const duration = performance.now() - state.inferenceStartTimes.get('prewarm');
-      state.inferenceDurations.set('prewarm', duration);
-      if (state.unconsumedSavings && state.unconsumedSavings.type === 'prewarm') {
-        state.unconsumedSavings.duration = duration;
-      }
-      updateMetricsUI();
+      recordInferenceDuration('prewarm', duration);
 
       state.sampleImageAltText = result;
       console.log("BTS: Warm-up Lap complete. Sample image alt text cached.");
@@ -353,8 +336,7 @@ export async function prewarmWithSampleImage() {
         console.error("Warm-up Lap failed:", error);
       }
       if (state.unconsumedSavings && state.unconsumedSavings.type === 'prewarm' && !state.unconsumedSavings.duration) {
-        state.unconsumedSavings = null;
-        updateMetricsUI();
+        clearUnconsumedSavings();
       }
       throw error;
     } finally {
@@ -374,7 +356,9 @@ export async function generateAltText() {
 
   const rawInput = DOM.altTextInput.value.trim();
 
-  state.originalAltText = (rawInput === state.lastGeneratedAltText) ? "" : rawInput;
+  // If the current text is an AI entry from history, we shouldn't treat it as a user hint
+  const currentEntry = history.stack[history.currentIndex];
+  state.originalAltText = (currentEntry && currentEntry.isAI && rawInput === currentEntry.text) ? "" : rawInput;
   
   // Rule 2 & 3: Generate and Refine always insert a new entry.
   // We handle the shimmer visually without hacking the history stack in ai.js.
@@ -384,7 +368,7 @@ export async function generateAltText() {
     DOM.altTextInput.classList.add('text-shimmer');
   }
 
-  DOM.altTextInput.parentElement.classList.remove('error-caution');
+  clearErrorState();
 
   DOM.generateBtn.disabled = true;
   DOM.altTextInput.disabled = true; 
@@ -393,6 +377,7 @@ export async function generateAltText() {
 
   state.isGenerating = true;
   updateShareButtonState();
+  history.updateUI(); // Lock history navigation buttons
   notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'start');
 
   DOM.generateLoader.classList.remove('hidden');
@@ -419,16 +404,7 @@ export async function generateAltText() {
 
     if (state.cachedAltText && state.cachedHint === state.originalAltText) {
       // Record time saved from consumption
-      if (state.unconsumedSavings) {
-        const actualSaved = state.unconsumedSavings.duration || (performance.now() - state.unconsumedSavings.startTime);
-        if (state.unconsumedSavings.type === 'prewarm') {
-          state.metrics.timeSavedPrewarm += actualSaved;
-        } else {
-          state.metrics.timeSavedProactive += actualSaved;
-        }
-        state.unconsumedSavings = null;
-      }
-      updateMetricsUI();
+      consumeSavings();
 
       resultText = state.cachedAltText;
 
@@ -436,16 +412,7 @@ export async function generateAltText() {
       state.cachedHint = null;
     }
     else if (state.activeInferencePromise && state.activeInferenceHint === state.originalAltText) {
-      if (state.unconsumedSavings) {
-        const actualSaved = state.unconsumedSavings.duration || (performance.now() - state.unconsumedSavings.startTime);
-        if (state.unconsumedSavings.type === 'prewarm') {
-          state.metrics.timeSavedPrewarm += actualSaved;
-        } else {
-          state.metrics.timeSavedProactive += actualSaved;
-        }
-        state.unconsumedSavings = null;
-      }
-      updateMetricsUI();
+      consumeSavings();
 
       resultText = await state.activeInferencePromise;
     }
@@ -457,10 +424,7 @@ export async function generateAltText() {
       state.activeInferencePromise = null;
       state.activeInferenceHint = null;
       
-      if (state.unconsumedSavings) {
-        state.unconsumedSavings = null;
-        updateMetricsUI();
-      }
+      clearUnconsumedSavings();
 
       try {
         await ensureImageLoaded(state.currentImageSource);
@@ -506,21 +470,13 @@ export async function generateAltText() {
       }
 
       if (lostTrickType) {
-        state.activeManualGeneration = { type: lostTrickType, startTime: performance.now() };
-        startMetricsLoop();
+        recordLossStart(lostTrickType);
       }
 
       try {
         resultText = await clone.prompt([{ role: "user", content: promptMessage }]);
       } finally {
-        if (state.activeManualGeneration) {
-          const duration = performance.now() - state.activeManualGeneration.startTime;
-          if (lostTrickType === 'prewarm') state.metrics.timeLostPrewarm += duration;
-          else if (lostTrickType === 'proactive') state.metrics.timeLostProactive += duration;
-          else if (lostTrickType === 'proactive2') state.metrics.timeLostProactive2 += duration;
-          state.activeManualGeneration = null;
-          updateMetricsUI();
-        }
+        recordLossEnd();
         clone.destroy();
       }
 
@@ -538,7 +494,6 @@ export async function generateAltText() {
       state.temporal.latestDelay = 0;
       updateTemporalLatestUI();
     }
-    DOM.generateLoader.classList.add('hidden');
 
     if (loadingManager) {
       loadingManager.stop();
@@ -549,6 +504,10 @@ export async function generateAltText() {
     if (existingIndex !== -1) {
       console.log(`History: Match found for AI generated text at index ${existingIndex}. Triggering Double-Take.`);
       
+      // Navigate history to the existing matching entry
+      history.currentIndex = existingIndex;
+      history.applyCurrent();
+
       const WITTY_MESSAGES = [
         "Nailed it twice.",
         "Still perfection.",
@@ -564,56 +523,8 @@ export async function generateAltText() {
         "If it ain't broke..."
       ];
       
-      const wasRefine = DOM.iconEnhance && !DOM.iconEnhance.classList.contains('hidden');
-      const activeIcon = wasRefine ? DOM.iconEnhance : DOM.iconSparkle;
-      const inactiveIcon = wasRefine ? DOM.iconSparkle : DOM.iconEnhance;
-      
-      // Navigate history to the existing matching entry
-      history.currentIndex = existingIndex;
-      history.applyCurrent(); 
-      
-      // Trigger Double-Take Animation on the contextually active Icon
-      if (activeIcon) {
-         activeIcon.classList.remove('hidden');
-         if (inactiveIcon) inactiveIcon.classList.add('hidden');
-         activeIcon.classList.remove('icon-double-take');
-         void activeIcon.offsetWidth; // trigger reflow
-         activeIcon.classList.add('icon-double-take');
-      }
-      
-      // Trigger Wave Animation on Text
-      DOM.altTextInput.classList.remove('text-wave');
-      DOM.altTextInput.classList.remove('text-shimmer');
-      DOM.altTextInput.classList.remove('text-dimming');
-      void DOM.altTextInput.offsetWidth; // trigger reflow
-      DOM.altTextInput.classList.add('text-wave');
-      
-      // Trigger History Stepper Pulse
-      if (DOM.historyIndex) {
-         DOM.historyIndex.classList.remove('history-index-pulse');
-         void DOM.historyIndex.offsetWidth; // trigger reflow
-         DOM.historyIndex.classList.add('history-index-pulse');
-      }
-      
-      // Trigger Witty Bubble
-      if (DOM.wittyBubble) {
-         DOM.wittyBubble.textContent = WITTY_MESSAGES[Math.floor(Math.random() * WITTY_MESSAGES.length)];
-         DOM.wittyBubble.classList.remove('hidden');
-         DOM.wittyBubble.classList.remove('bubble-pop');
-         void DOM.wittyBubble.offsetWidth; // trigger reflow
-         DOM.wittyBubble.classList.add('bubble-pop');
-      }
-      
-      setTimeout(() => {
-         DOM.altTextInput.classList.remove('text-wave');
-         if (activeIcon) activeIcon.classList.remove('icon-double-take');
-         if (DOM.historyIndex) DOM.historyIndex.classList.remove('history-index-pulse');
-         if (DOM.wittyBubble) {
-           DOM.wittyBubble.classList.remove('bubble-pop');
-           DOM.wittyBubble.classList.add('hidden');
-         }
-         updateGenerateButtonUI(); // Restore to normal state for the current history item
-      }, 2500);
+      const wittyMessage = WITTY_MESSAGES[Math.floor(Math.random() * WITTY_MESSAGES.length)];
+      triggerDoubleTakeAnimation(wittyMessage);
 
       state.lastGeneratedAltText = resultText;
       startProactiveGeneration(resultText, null, true);
@@ -644,15 +555,7 @@ export async function generateAltText() {
       state.aiSession = null;
     }
 
-    updateStatus('error', 'AI Failed');
-
-    DOM.altTextInput.parentElement.classList.add('error-caution');
-
-    if (state.originalAltText === "") {
-      DOM.altTextInput.placeholder = "Even AI can't see these pixels. Tell the story for everyone—and everything—who can't see pixels.";
-    } else {
-      DOM.altTextInput.value = state.originalAltText;
-    }
+    showErrorState(state.originalAltText);
   } finally {
     if (loadingManager) {
       loadingManager.stop();
@@ -665,6 +568,7 @@ export async function generateAltText() {
     updateGenerateButtonUI(); 
     state.isGenerating = false;
     updateShareButtonState();
+    history.updateUI(); // Unlock history navigation buttons
 
     const isUserDrafting = (document.activeElement === DOM.postContent);
     if (!isUserDrafting) {

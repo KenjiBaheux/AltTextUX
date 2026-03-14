@@ -17,30 +17,67 @@ export async function ensureImageLoaded(imageSource) {
   return true;
 }
 
-export function typeWriterEffect(text) {
+export async function typeWriterEffect(text) {
   if (!state.settings.enableTransitions) {
     DOM.altTextInput.value = text;
-    return Promise.resolve();
+    return;
   }
-  
+
   state.isAnimating = true;
+  DOM.altTextInput.value = '';
 
-  return new Promise(resolve => {
-    let i = 0;
-    DOM.altTextInput.value = '';
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    function type() {
-      if (i < text.length) {
-        DOM.altTextInput.value += text.charAt(i);
-        i++;
-        setTimeout(type, 10 + Math.random() * 20); // Fast but slightly variable
-      } else {
-        state.isAnimating = false;
-        resolve();
+  // Configuration for "Super-Human" feel
+  const BASE_SPEED = 15;     // Base ms per char
+  const VARIANCE = 25;       // Random jitter
+  const WORD_PAUSE = 60;    // Pause after a space
+  const TYPO_CHANCE = 0.01;  // Cance to make a typo
+  const BACKSPACE_PAUSE = 80; // Pause after a backspace
+  const OOPS_PAUSE = 40; // Pause after a typo
+  const BURST_FACTOR = 0.5; // Factor to reduce delay for the middle of words
+
+  let i = 0;
+  while (i < text.length) {
+    const char = text.charAt(i);
+    const isSpace = char === ' ';
+
+    // 1. Probabilistic Typo Logic
+    if (!isSpace && Math.random() < TYPO_CHANCE) {
+      const adjacentKeys = "qwertyuiopasdfghjklzxcvbnm";
+      const randomChar = adjacentKeys[Math.floor(Math.random() * adjacentKeys.length)];
+
+      DOM.altTextInput.value += randomChar;
+      await sleep(BASE_SPEED + OOPS_PAUSE); // Small "oops" pause
+
+      // Delete the typo
+      DOM.altTextInput.value = DOM.altTextInput.value.slice(0, -1);
+      await sleep(BACKSPACE_PAUSE); // Backspace pause
+      // Continue to type the correct character below
+    }
+
+    // 2. Type the actual character
+    DOM.altTextInput.value += char;
+
+    // 3. Calculate Delay (The Rhythm)
+    let delay = BASE_SPEED + Math.random() * VARIANCE;
+
+    if (isSpace) {
+      delay += WORD_PAUSE; // The "slug" between words
+    } else {
+      // "Burst" effect: faster typing for the middle of words
+      // Slower for the start of a word as the "typist" finds the key
+      const nextChar = text.charAt(i + 1);
+      if (nextChar && nextChar !== ' ') {
+        delay = (BASE_SPEED + (Math.random() * (VARIANCE / 2))) * BURST_FACTOR;
       }
     }
-    type();
-  });
+
+    await sleep(delay);
+    i++;
+  }
+
+  state.isAnimating = false;
 }
 
 export async function rewriteTextEffect(element, newText, fast = false) {
