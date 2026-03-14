@@ -5,11 +5,12 @@ import { history } from './history.js';
 import { notifyBTS, updateTemporalLatestUI } from './bts.js';
 import { typeWriterEffect, rewriteTextEffect, LoadingMessageManager, ensureImageLoaded } from './utils.js';
 import { recordInferenceStart, recordInferenceDuration, consumeSavings, clearUnconsumedSavings, recordLossStart, recordLossEnd } from './metrics.js';
-import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI, showProgressUI, hideProgressUI, triggerDoubleTakeAnimation, showErrorState, clearErrorState } from './ui.js';
+import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI, showProgressUI, hideProgressUI, triggerDoubleTakeAnimation, showErrorState, showUnavailableState, clearErrorState } from './ui.js';
 
 export async function checkAIAvailability() {
   if (!window.LanguageModel) {
     updateStatus('unavailable', 'AI API not found');
+    showUnavailableState();
     return;
   }
 
@@ -81,11 +82,13 @@ export async function checkAIAvailability() {
       case 'unavailable':
       default:
         updateStatus('unavailable', 'AI Model Unavailable');
+        showUnavailableState();
         break;
     }
   } catch (error) {
     console.error("Error checking AI availability:", error);
     updateStatus('unavailable', 'Error in prerequisites steps');
+    showUnavailableState();
   }
 }
 
@@ -96,6 +99,12 @@ export async function prepareAISession(forceNew = false) {
   // Cleanup old session if forcing new
   if (forceNew) {
     cleanupAISession();
+  }
+
+  if (!window.LanguageModel) {
+    updateStatus('unavailable', 'AI API not found');
+    showUnavailableState();
+    throw new Error("AI API not found");
   }
 
   state.aiSessionPromise = (async () => {
@@ -152,6 +161,7 @@ export async function prepareAISession(forceNew = false) {
     } catch (error) {
       console.error("Failed to create session", error);
       updateStatus('unavailable', 'Failed to load model');
+      showUnavailableState();
       state.aiSessionPromise = null; // Reset so next call can retry
       throw error;
     }
