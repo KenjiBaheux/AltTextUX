@@ -150,6 +150,17 @@ function setupEventListeners() {
   DOM.altTextInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault(); 
+      if (DOM.generateBtn.classList.contains('error-state')) {
+        // Flash the status badge and shake the icon to indicate failure
+        DOM.statusBadge.classList.remove('badge-error-flash');
+        const icon = DOM.generateBtn.querySelector('svg:not(.hidden)');
+        if (icon) icon.classList.remove('icon-shake');
+        void DOM.statusBadge.offsetWidth; // Reflow
+        DOM.statusBadge.classList.add('badge-error-flash');
+        if (icon) icon.classList.add('icon-shake');
+        return;
+      }
+
       if (!DOM.generateBtn.disabled) {
         generateAltText();
       }
