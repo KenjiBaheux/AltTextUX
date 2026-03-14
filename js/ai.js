@@ -13,7 +13,16 @@ export async function checkAIAvailability() {
   }
 
   try {
-    const availability = await window.LanguageModel.availability();
+    const options = {
+      expectedInputs: [
+        { type: "image" },
+        { type: "text", languages: ["en"] /* fallback/system prompt lang */ }
+      ],
+      expectedOutputs: [
+        { type: "text", languages: ["en"] }
+      ]
+    }
+    const availability = await window.LanguageModel.availability(options);
 
     switch (availability) {
       case 'available':
@@ -50,7 +59,7 @@ export async function checkAIAvailability() {
                 return;
               }
 
-              const currentStatus = await window.LanguageModel.availability();
+              const currentStatus = await window.LanguageModel.availability(options);
               if (currentStatus !== 'downloading') {
                 clearInterval(state.availabilityPollInterval);
                 state.availabilityPollInterval = null;
@@ -79,7 +88,7 @@ export async function checkAIAvailability() {
     }
   } catch (error) {
     console.error("Error checking AI availability:", error);
-    updateStatus('unavailable', 'Error connecting to AI');
+    updateStatus('unavailable', 'Error in prerequisites steps');
   }
 }
 
@@ -253,8 +262,9 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
   state.unconsumedSavings = { type: metricType, startTime: state.inferenceStartTimes.get(metricType), duration: null };
   startMetricsLoop();
 
-  state.activeInferencePromise = clone.prompt([{ role: "user", content: promptMessage }], { signal: state.inferenceAbortController.signal })
-    .then((result) => {
+  state.activeInferencePromise = (async () => {
+    try {
+      const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal: state.inferenceAbortController.signal });
       const duration = performance.now() - state.inferenceStartTimes.get(metricType);
       state.inferenceDurations.set(metricType, duration);
       if (state.unconsumedSavings && state.unconsumedSavings.type === metricType) {
@@ -264,27 +274,25 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
       
       state.cachedAltText = result;
       state.cachedHint = normalizedHint;
-      state.activeInferencePromise = null;
-      state.activeInferenceHint = null;
       notifyBTS(btsType, 'end');
-      clone.destroy(); // Cleanup clone
       return result;
-    })
-    .catch((error) => {
+    } catch (error) {
       notifyBTS(normalizedHint ? 'guidance' : 'proactive-1', 'end');
       // Ignore abort errors
       if (error.name !== 'AbortError') {
         console.error("Proactive generation failed:", error);
       }
-      state.activeInferencePromise = null;
-      state.activeInferenceHint = null;
-      clone.destroy(); // Cleanup clone even on error
-      
       if (state.unconsumedSavings && state.unconsumedSavings.type === metricType && !state.unconsumedSavings.duration) {
         state.unconsumedSavings = null;
         updateMetricsUI();
       }
-    });
+      throw error;
+    } finally {
+      state.activeInferencePromise = null;
+      state.activeInferenceHint = null;
+      clone.destroy(); // Cleanup clone
+    }
+  })();
 
   return state.activeInferencePromise;
 }
@@ -311,8 +319,9 @@ export async function prewarmWithSampleImage() {
   state.unconsumedSavings = { type: 'prewarm', startTime: state.inferenceStartTimes.get('prewarm'), duration: null };
   startMetricsLoop();
 
-  state.prewarmPromise = clone.prompt([{ role: "user", content: promptMessage }], { signal: state.prewarmAbortController.signal })
-    .then((result) => {
+  state.prewarmPromise = (async () => {
+    try {
+      const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal: state.prewarmAbortController.signal });
       const duration = performance.now() - state.inferenceStartTimes.get('prewarm');
       state.inferenceDurations.set('prewarm', duration);
       if (state.unconsumedSavings && state.unconsumedSavings.type === 'prewarm') {
@@ -323,26 +332,23 @@ export async function prewarmWithSampleImage() {
       state.sampleImageAltText = result;
       console.log("BTS: Warm-up Lap complete. Sample image alt text cached.");
       notifyBTS('prewarm', 'end');
-      clone.destroy();
       return result;
-    })
-    .catch((error) => {
+    } catch (error) {
       notifyBTS('prewarm', 'end');
       if (error.name !== 'AbortError') {
         console.error("Warm-up Lap failed:", error);
       }
-      clone.destroy();
-      
       if (state.unconsumedSavings && state.unconsumedSavings.type === 'prewarm' && !state.unconsumedSavings.duration) {
         state.unconsumedSavings = null;
         updateMetricsUI();
       }
       throw error;
-    })
-    .finally(() => {
+    } finally {
+      clone.destroy();
       state.prewarmAbortController = null;
       state.prewarmPromise = null;
-    });
+    }
+  })();
 
   return true; // Work started
 }
@@ -385,6 +391,13 @@ export async function generateAltText() {
 
   let resultText = "";
 
+  const requestTimestamp = performance.now();
+  const minD = state.temporal.minDelay;
+  const maxD = state.temporal.maxDelay;
+  const targetDelay = minD + Math.random() * (maxD - minD);
+  state.temporal.latestDelay = Math.round(targetDelay);
+  updateTemporalLatestUI();
+
   try {
     if (state.settings.simulateAIFail) {
       throw new Error("Simulated AI Failure");
@@ -403,23 +416,10 @@ export async function generateAltText() {
       }
       updateMetricsUI();
 
-      notifyBTS('temporal');
       resultText = state.cachedAltText;
 
       state.cachedAltText = "";
       state.cachedHint = null;
-
-      const minD = state.temporal.minDelay;
-      const maxD = state.temporal.maxDelay;
-      const delay = minD + Math.random() * (maxD - minD);
-      
-      state.temporal.latestDelay = Math.round(delay);
-      updateTemporalLatestUI();
-
-      if (delay > 0) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-      DOM.generateLoader.classList.add('hidden');
     }
     else if (state.activeInferencePromise && state.activeInferenceHint === state.originalAltText) {
       if (state.unconsumedSavings) {
@@ -507,6 +507,18 @@ export async function generateAltText() {
       state.cachedAltText = resultText;
       state.cachedHint = state.originalAltText;
     }
+
+    const elapsed = performance.now() - requestTimestamp;
+    const remainingDelay = targetDelay - elapsed;
+
+    if (remainingDelay > 0) {
+      notifyBTS('temporal');
+      await new Promise(resolve => setTimeout(resolve, remainingDelay));
+    } else {
+      state.temporal.latestDelay = 0;
+      updateTemporalLatestUI();
+    }
+    DOM.generateLoader.classList.add('hidden');
 
     if (loadingManager) {
       loadingManager.stop();
