@@ -145,12 +145,12 @@ function setupEventListeners() {
     }
 
     if (e.key === 'ArrowUp' && DOM.altTextInput.selectionStart === 0) {
-      if (history.prev()) {
+      if (!state.isGenerating && history.prev()) {
         e.preventDefault();
         notifyBTS('versioning', 'pulse');
       }
     } else if (e.key === 'ArrowDown' && DOM.altTextInput.selectionEnd === DOM.altTextInput.value.length) {
-      if (history.next()) {
+      if (!state.isGenerating && history.next()) {
         e.preventDefault();
         notifyBTS('versioning', 'pulse');
       }

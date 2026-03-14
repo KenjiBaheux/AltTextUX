@@ -160,8 +160,8 @@ export class AltTextHistory {
       const wasHidden = stepper.classList.contains('hidden');
       stepper.classList.remove('hidden');
       indexLabel.textContent = `${this.currentIndex + 1}/${this.stack.length}`;
-      prevBtn.disabled = this.currentIndex <= 0;
-      nextBtn.disabled = this.currentIndex >= this.stack.length - 1;
+      prevBtn.disabled = this.currentIndex <= 0 || state.isGenerating;
+      nextBtn.disabled = this.currentIndex >= this.stack.length - 1 || state.isGenerating;
 
       // When the stepper first appears, vocalize it to the BTS panel
       if (wasHidden && typeof notifyBTS === 'function') {

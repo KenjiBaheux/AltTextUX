@@ -1,6 +1,7 @@
 import { DOM } from './dom.js';
 import { state } from './state.js';
-import { notifyBTS, setBTSState, updateMetricsUI } from './bts.js';
+import { notifyBTS, setBTSState } from './bts.js';
+import { consumeSavings } from './metrics.js';
 import { history } from './history.js';
 import { prepareAISession, startProactiveGeneration } from './ai.js';
 import { typeWriterEffect } from './utils.js';
@@ -182,18 +183,7 @@ export async function handleSmartFallback() {
     fallbackText = state.cachedAltText;
     
     // Track time saved
-    if (state.unconsumedSavings) {
-      const actualSaved = state.unconsumedSavings.duration || (performance.now() - state.unconsumedSavings.startTime);
-      if (state.unconsumedSavings.type === 'prewarm') {
-        state.metrics.timeSavedPrewarm += actualSaved;
-      } else if (state.unconsumedSavings.type === 'proactive2') {
-        state.metrics.timeSavedProactive2 += actualSaved;
-      } else {
-        state.metrics.timeSavedProactive += actualSaved;
-      }
-      state.unconsumedSavings = null;
-    }
-    updateMetricsUI();
+    consumeSavings();
 
     state.cachedAltText = "";
     state.cachedHint = null;
@@ -202,18 +192,7 @@ export async function handleSmartFallback() {
     console.log("BTS: Smart Fallback - Waiting for in-flight inference.");
     
     // Track time saved
-    if (state.unconsumedSavings) {
-      const actualSaved = state.unconsumedSavings.duration || (performance.now() - state.unconsumedSavings.startTime);
-      if (state.unconsumedSavings.type === 'prewarm') {
-        state.metrics.timeSavedPrewarm += actualSaved;
-      } else if (state.unconsumedSavings.type === 'proactive2') {
-        state.metrics.timeSavedProactive2 += actualSaved;
-      } else {
-        state.metrics.timeSavedProactive += actualSaved;
-      }
-      state.unconsumedSavings = null;
-    }
-    updateMetricsUI();
+    consumeSavings();
 
     fallbackText = await state.activeInferencePromise;
     state.cachedAltText = "";
@@ -248,4 +227,83 @@ export async function handleSmartFallback() {
     state.isGenerating = false;
     updateShareButtonState();
   }
+}
+
+export function showProgressUI(percent = null) {
+  if (DOM.progressContainer) {
+    DOM.progressContainer.classList.add('show');
+    if (percent !== null) {
+      DOM.progressContainer.style.transitionDelay = '0s';
+      if (DOM.progressFill) DOM.progressFill.style.width = `${percent}%`;
+      if (DOM.progressPercent) DOM.progressPercent.textContent = `${percent}%`;
+    } else {
+      if (DOM.progressPercent) DOM.progressPercent.textContent = '...';
+    }
+  }
+}
+
+export function hideProgressUI(delay = 0) {
+  setTimeout(() => {
+    if (DOM.progressContainer) DOM.progressContainer.classList.remove('show');
+  }, delay);
+}
+
+export function triggerDoubleTakeAnimation(wittyMessage) {
+  const wasRefine = DOM.iconEnhance && !DOM.iconEnhance.classList.contains('hidden');
+  const activeIcon = wasRefine ? DOM.iconEnhance : DOM.iconSparkle;
+  const inactiveIcon = wasRefine ? DOM.iconSparkle : DOM.iconEnhance;
+
+  if (activeIcon) {
+     activeIcon.classList.remove('hidden');
+     if (inactiveIcon) inactiveIcon.classList.add('hidden');
+     activeIcon.classList.remove('icon-double-take');
+     void activeIcon.offsetWidth; // trigger reflow
+     activeIcon.classList.add('icon-double-take');
+  }
+
+  DOM.altTextInput.classList.remove('text-wave');
+  DOM.altTextInput.classList.remove('text-shimmer');
+  DOM.altTextInput.classList.remove('text-dimming');
+  void DOM.altTextInput.offsetWidth; // trigger reflow
+  DOM.altTextInput.classList.add('text-wave');
+
+  if (DOM.historyIndex) {
+     DOM.historyIndex.classList.remove('history-index-pulse');
+     void DOM.historyIndex.offsetWidth; // trigger reflow
+     DOM.historyIndex.classList.add('history-index-pulse');
+  }
+
+  if (DOM.wittyBubble && wittyMessage) {
+     DOM.wittyBubble.textContent = wittyMessage;
+     DOM.wittyBubble.classList.remove('hidden');
+     DOM.wittyBubble.classList.remove('bubble-pop');
+     void DOM.wittyBubble.offsetWidth; // trigger reflow
+     DOM.wittyBubble.classList.add('bubble-pop');
+  }
+
+  setTimeout(() => {
+     DOM.altTextInput.classList.remove('text-wave');
+     if (activeIcon) activeIcon.classList.remove('icon-double-take');
+     if (DOM.historyIndex) DOM.historyIndex.classList.remove('history-index-pulse');
+     if (DOM.wittyBubble) {
+       DOM.wittyBubble.classList.remove('bubble-pop');
+       DOM.wittyBubble.classList.add('hidden');
+     }
+     updateGenerateButtonUI(); 
+  }, 2500);
+}
+
+export function showErrorState(originalAltText) {
+  updateStatus('error', 'AI Failed');
+  DOM.altTextInput.parentElement.classList.add('error-caution');
+
+  if (originalAltText === "") {
+    DOM.altTextInput.placeholder = "Even AI can't see these pixels. Tell the story for everyone—and everything—who can't see pixels.";
+  } else {
+    DOM.altTextInput.value = originalAltText;
+  }
+}
+
+export function clearErrorState() {
+  DOM.altTextInput.parentElement.classList.remove('error-caution');
 }
