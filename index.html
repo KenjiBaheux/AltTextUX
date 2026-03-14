@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alt Text Generator | Chrome AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="background-effect"></div>
+
+  <main class="container">
+    <header class="app-header">
+      <h1>UX ideas for AI-assisted Alt Text</h1>
+      <p>Powered by <a href="https://developer.chrome.com/docs/ai/built-in" target="_blank">Built-in AI</a></p>
+    </header>
+
+    <div class="ai-status-block">
+      <div class="ai-status-header">
+        <span class="ai-status-label">AI Status</span>
+        <div class="progress-container" id="progress-container">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <span id="progress-percent" class="progress-percent">0%</span>
+        </div>
+        <div class="status-badge-container">
+          <div id="status-badge" class="badge status-checking">
+            <span id="status-text">Checking AI Availability...</span>
+            <span id="error-info-icon" class="info-icon hidden">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <div class="tooltip">
+                <strong>Troubleshooting Tips:</strong>
+                <ul>
+                  <li>Close unnecessary programs and tabs to free up memory.</li>
+                  <li>Wait a moment and try generating again.</li>
+                  <li>If the issue persists, try restarting your browser or computer.</li>
+                </ul>
+              </div>
+            </span>
+            <span id="unavailable-info-icon" class="info-icon hidden">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <div class="tooltip">
+                <strong>Why is AI Unavailable?</strong>
+                <ul>
+                  <li>Your hardware might not meet the <a
+                      href="https://developer.chrome.com/docs/ai/prompt-api#hardware-requirements"
+                      target="_blank">minimum requirements</a>.</li>
+                  <li>The Prompt API and Multimodal flags might be disabled in <code>chrome://flags</code>.</li>
+                  <li>You might be using a browser that doesn't yet support these APIs.</li>
+                </ul>
+                <a href="https://developer.chrome.com/docs/ai/built-in" target="_blank"
+                  style="display: block; margin-top: 0.5rem; font-weight: 600;">Learn more about Built-in AI</a>
+              </div>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass-card main-card">
+      <div class="upload-section" id="drop-zone">
+        <div class="staging-overlay hidden" id="staging-overlay">
+          <div class="staging-content">
+            <div class="loader"></div>
+            <span>Staging Image...</span>
+          </div>
+        </div>
+        <input type="file" id="image-upload" accept="image/png, image/jpeg, image/webp" hidden>
+
+        <div class="upload-content" id="upload-content">
+          <div class="upload-left-group">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <h3>Upload Image or Drop Here</h3>
+            <p>Images are processed locally.<br />No data leaves your device</p>
+            <button class="btn btn-secondary" id="select-btn">Select Image</button>
+          </div>
+
+          <div class="divider-vertical">
+            <span>OR</span>
+          </div>
+
+          <div class="upload-right-group">
+            <button class="btn btn-secondary" id="sample-btn">Use Sample Image</button>
+          </div>
+        </div>
+
+        <div class="preview-container hidden" id="preview-container">
+          <div class="preview-image-wrapper">
+            <img id="image-preview" src="" alt="Image Preview">
+            <button class="btn btn-icon remove-btn" id="remove-btn" title="Remove image">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="alt-text-container">
+            <label for="alt-text-input" class="input-label">Alt Text</label>
+            <div class="input-group">
+              <textarea id="alt-text-input" class="form-textarea"
+                placeholder="Every image tells a short story. Write it for those who can't see the pixels..."
+                rows="2"></textarea>
+              <button class="btn btn-icon ai-generate-btn" id="generate-btn" title="Generate with AI">
+                <svg id="icon-sparkle" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path
+                    d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                  <path d="M5 3v4" />
+                  <path d="M19 17v4" />
+                  <path d="M3 5h4" />
+                  <path d="M17 19h4" />
+                </svg>
+                <svg id="icon-enhance" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path
+                    d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72" />
+                  <path d="m14 7 3 3" />
+                  <path d="M5 6v4" />
+                  <path d="M19 14v4" />
+                  <path d="M10 2v2" />
+                  <path d="M7 8H3" />
+                  <path d="M21 16h-4" />
+                  <path d="M11 3H9" />
+                </svg>
+                <div class="loader hidden" id="generate-loader"></div>
+              </button>
+              <div id="witty-bubble" class="witty-bubble hidden"></div>
+              <div class="history-stepper hidden" id="history-stepper">
+                <button class="btn btn-icon stepper-btn" id="history-prev" title="Previous version (Up Arrow at start)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m18 15-6-6-6 6" />
+                  </svg>
+                </button>
+                <span class="history-index" id="history-index">1/1</span>
+                <button class="btn btn-icon stepper-btn" id="history-next" title="Next version (Down Arrow at end)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="post-composition-area">
+        <label for="post-content" class="input-label">Your Post</label>
+        <textarea id="post-content" class="form-textarea" placeholder="What would you like to share today?"
+          rows="4"></textarea>
+
+        <div class="post-actions">
+          <button class="btn btn-primary publish-btn" id="share-btn">Share</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Sample Image loaded efficiently -->
+  <img id="sample-image-source"
+    src="https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=600&auto=format&fit=crop"
+    crossorigin="anonymous" hidden>
+
+  <!-- Behind the Scenes Sidepanel -->
+  <button id="bts-toggle" class="bts-toggle">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 18h8" />
+      <path d="M3 22h18" />
+      <path d="M14 22a7 7 0 1 0 0-14h-1" />
+      <path d="M9 14h2" />
+      <path d="M9 12a2 2 0 1 1-2-2V6h6v8a2 2 0 1 1-2 2v-2h-2Z" />
+      <path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3" />
+    </svg>
+    <div class="bts-notification-dot"></div>
+    <div class="bts-tooltip">Reveals the magic</div>
+  </button>
+
+  <aside id="bts-panel" class="bts-panel">
+    <div class="bts-header">
+      <h2>Behind the Scenes</h2>
+      <div class="bts-header-actions">
+        <button id="bts-pin" class="btn-icon" title="Toggle pin">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 17v5"/>
+            <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
+          </svg>
+        </button>
+        <button id="bts-close" class="btn-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="bts-content" class="bts-content">
+      <div class="bts-card active" data-bts="default">
+        <h3>Welcome!</h3>
+        <p>Explore the design patterns and technical tricks making this AI experience feel as seamless as possible.
+          Hover over elements to learn more. Try the demo, and see how the UX behaves under different conditions.</p>
+      </div>
+
+      <div class="bts-card" data-bts="status">
+        <h3>Availability Polling</h3>
+        <p>Chrome's model availability can sometimes get stuck in an inaccurate "downloadable" state (<a
+            href="https://issues.chromium.org/issues/429183223" target="_blank">Chrome bug</a>) especially after a session
+          restore on a browser restart. We use a background polling strategy to detect when the model is actually ready,
+          even if the progress events are silent.</p>
+      </div>
+
+      <div class="bts-card" data-bts="prewarm">
+        <h3>Prewarming</h3>
+        <p>On-device AI cold starts can be slow while the model loads into memory.
+          We "prewarm" the engine by firing a background multimodal task. Here, we use the sample image
+          on startup. In a real environment, you would use a dummy or simple image.
+          Cold start latencies are offset while the user is busy with the UI.</p>
+        <div class="bts-card-controls">
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-prewarm" checked>
+            <span class="slider"></span>
+            <span class="toggle-label">Enable Prewarming</span>
+          </label>
+          <div class="bts-metric"><span id="metric-label-prewarm">Time saved:</span> <span id="metric-prewarm">0</span>ms</div>
+        </div>
+      </div>
+
+      <div class="bts-card" data-bts="proactive-1">
+        <h3>Anticipate</h3>
+        <p>Why wait for a click? We make sure that the most likely AI task is running as soon as we can intuit the
+          user's intent (e.g. reaching or hovering the AI button). By the time you use the AI feature, the result is
+          either ready or well on its way.
+        </p>
+        <div class="bts-card-controls">
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-proactive" checked>
+            <span class="slider"></span>
+            <span class="toggle-label">Enable Anticipation</span>
+          </label>
+          <div class="bts-metric"><span id="metric-label-proactive">Time saved:</span> <span id="metric-proactive">0</span>ms</div>
+        </div>
+      </div>
+
+      <div class="bts-card" data-bts="empathetic-ui">
+        <h3>Empathetic UI</h3>
+        <p>Alt text is often seen as a chore. We frame the image as a <b>"short story"</b> to shift the mindset from
+          data entry to storytelling—reminding users that an image is more than pixels for those who can't see them.
+        </p>
+        <div class="bts-card-controls">
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-bland-placeholder">
+            <span class="slider"></span>
+            <span class="toggle-label">Use bland placeholder</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="bts-card" data-bts="empathetic-ai">
+        <h3>Empathetic AI</h3>
+        <p>When AI fails, the placeholder pivots to admit it: <em>"Even AI can't see these pixels. Tell the story for
+            everyone—and everything—who can't see pixels."</em> This reminds users that their human input is the
+          ultimate, unbreakable fallback for everyone—and every machine.
+        </p>
+        <div class="bts-card-controls">
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-simulate-ai-fail">
+            <span class="slider"></span>
+            <span class="toggle-label">Simulate AI Failure</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="bts-card" data-bts="chameleon">
+        <h3>Visual Signatures</h3>
+        <p>We use different visual signatures to communicate the <em>intent</em> of the
+          AI task—whether it is transforming existing text or generating new content.</p>
+      </div>
+
+      <div class="bts-card" data-bts="proactive-2">
+        <h3>One step ahead</h3>
+        <p>If the user consumes an AI result, we kick off the next most likely AI task as soon as we start rendering the
+          result. That way, we are always one step ahead.
+        </p>
+        <div class="bts-card-controls">
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-proactive2" checked>
+            <span class="slider"></span>
+            <span class="toggle-label">Enable One Step Ahead</span>
+          </label>
+          <div class="bts-metric"><span id="metric-label-proactive2">Time saved:</span> <span id="metric-proactive2">0</span>ms</div>
+        </div>
+      </div>
+
+      <div class="bts-card" data-bts="temporal">
+        <h3>Temporal Illusion</h3>
+        <p>If the AI result is cached, we add a random "artificial delay." Paradoxically, if the result
+          appears instantly, users might not notice it and often trust it less. The delay ensures that the UX is
+          consistent with the user's mental model.</p>
+        <div class="bts-card-controls temporal-controls">
+          <div class="range-bounds">
+            <span>0s</span>
+            <span>10s</span>
+          </div>
+          <div class="range-slider">
+            <div class="range-slider-track"></div>
+            <div class="range-slider-fill" id="temporal-slider-fill"></div>
+            <div class="range-slider-latest hidden" id="temporal-slider-latest"></div>
+            <input type="range" id="temporal-min" min="0" max="10000" value="1000" step="100">
+            <input type="range" id="temporal-max" min="0" max="10000" value="3000" step="100">
+          </div>
+          <div class="range-footer">
+            <span class="range-current-value">Artificial delay: <span id="temporal-label-min" class="val-mono">1.0s</span> - <span id="temporal-label-max" class="val-mono">3.0s</span></span>
+            <button id="temporal-reset-btn" class="reset-slider-btn" aria-label="Reset Delays" title="Reset to defaults">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                <path d="M3 3v5h5"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bts-card" data-bts="morph">
+        <h3>Transitions Matter</h3>
+        <p>Instantly replacing text easily goes unnoticed. We use a combination of typewriter effect for a generated
+          alt-text, and a word-morphing effect using scramble characters for a refined alt-text,
+          creating a fluid transition that feels intentional and satisfying.</p>
+        <div class="bts-card-controls">
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-transitions" checked>
+            <span class="slider"></span>
+            <span class="toggle-label">Enable Transitions</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="bts-card" data-bts="deduplication">
+        <h3>Feedback over Friction</h3>
+        <p>Instead of silently ignoring duplicate generations, we proactively snap the user to the existing identical entry in history with a playful animation (the "deduplication double-take") and a witty tooltip to add personality.</p>
+      </div>
+
+      <div class="bts-card" data-bts="fallback">
+        <h3>Smart Fallback</h3>
+        <p>Accessibility by default. If you move to draft your post without providing an alt-text, the app
+          automatically populates it using a background AI result. It's also a way to teach about the AI
+          feature through a subtle visual cue on the AI icon.</p>
+      </div>
+
+      <div class="bts-card" data-bts="guidance">
+        <h3>Semantic Guidance</h3>
+        <p>We allow the user to use their own alt-text as "guidance" and turn the Generate with AI into a Refine with AI
+          feature. This shift empowers the user as the
+          creative director and improves the AI’s adherence to the user's intent.</p>
+      </div>
+
+      <div class="bts-card" data-bts="versioning">
+        <h3>Safety in Iteration</h3>
+        <p>Iteration shouldn't feel like a gamble. We treat AI results as a <b>non-destructive stack</b>. By syncing the
+          UI stepper with intuitive arrow-key navigation (Up/Down), power users can fearlessly explore different tones,
+          knowing their favorite version is always one keystroke away.</p>
+      </div>
+
+
+      <div class="bts-card" data-bts="shortcuts">
+        <h3>Zero-Friction Flow</h3>
+        <p>We implemented platform-specific shortcuts (Ctrl/Cmd+Enter) to keep
+          power users in their creative flow without breaking for a mouse click.</p>
+      </div>
+
+
+      <div class="bts-card" data-bts="focus">
+        <h3>Respect The Flow</h3>
+        <p>We strive to respect the user's flow. While we restore the focus on alt-text for final edits after an AI
+          operation, we don't steal the cursor focus if the user moved on to another step in the journey
+          (e.g. creating a post). User intent and maintaining their flow is always the priority.
+        </p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Success Overlay (Demo Only) -->
+  <div id="success-overlay" class="hidden">
+    <div class="success-content glass">
+      <div class="success-icon">🎉</div>
+      <h2>Successfully "Shared"!</h2>
+      <p>Your post was beautifully composed and ready to go.</p>
+      <div class="demo-disclosure">
+        <strong>Demo Only:</strong> No data was actually transmitted or shared. This application is a UX demonstration
+        for Built-in AI patterns.
+      </div>
+      <button id="success-close" class="primary-btn">Close Demo</button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>
