@@ -45,7 +45,7 @@ export function updateStatus(stateStr, text) {
     }
   }
 
-  if (stateStr === 'error') {
+  if (stateStr === 'error' || stateStr === 'unavailable') {
     DOM.generateBtn.classList.add('error-state');
   } else {
     DOM.generateBtn.classList.remove('error-state');
@@ -301,6 +301,13 @@ export function showErrorState(originalAltText) {
     DOM.altTextInput.placeholder = "Even AI can't see these pixels. Tell the story for everyone—and everything—who can't see pixels.";
   } else {
     DOM.altTextInput.value = originalAltText;
+  }
+}
+
+export function showUnavailableState() {
+  DOM.altTextInput.parentElement.classList.add('error-caution');
+  if (DOM.altTextInput.value.trim() === "") {
+    DOM.altTextInput.placeholder = "Local AI is a no-show for this setup. Tell the story for everyone—and everything—who can't see pixels.";
   }
 }
 
