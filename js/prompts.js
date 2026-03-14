@@ -15,5 +15,5 @@ Instructions:
 3. If the guidance is a draft, improve its clarity and remove fluff.
 4. Output ONLY the final alt text string. Do not include labels like "Alt text:" or "Output:" or "A picture of...".`,
   USER_DEFAULT: "Return an alt text describing the image.",
-  USER_GUIDANCE: (hint) => `Here is user guidance to prioritize specific details or an initial version to improve: "${hint}". Please generate a concise alt text description that aligns with this direction and followers the strict guidelines.`
+  USER_GUIDANCE: (hint) => `Here is user guidance to prioritize specific details or an initial version to improve: "${hint}". Please generate a concise alt text description that aligns with this direction and follows the strict guidelines.`
 };
