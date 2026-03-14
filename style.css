@@ -279,9 +279,10 @@ a:hover {
 }
 
 .ai-status-header {
-  display: grid;
-  grid-template-columns: 100px 1fr 200px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 1rem;
 }
 
@@ -1590,4 +1591,72 @@ a:hover {
 
 .reset-slider-btn:hover::after {
   opacity: 1;
+}
+
+/* App Footer */
+.app-footer {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.footer-links a {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-secondary);
+}
+
+.footer-links a:hover {
+  color: var(--text-primary);
+}
+
+.footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.footer-actions .btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+}
+
+/* Mobile Responsiveness specifically for AI Status Header */
+@media (max-width: 550px) {
+  .ai-status-header {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.75rem;
+    text-align: center;
+  }
+  
+  .status-badge-container {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .progress-container {
+    max-width: 100%;
+    justify-content: center;
+  }
+  
+  .badge {
+    height: auto;
+    white-space: normal;
+    text-align: center;
+  }
 }
