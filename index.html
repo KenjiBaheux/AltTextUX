@@ -116,36 +116,53 @@
           </div>
 
           <div class="alt-text-container">
-            <label for="alt-text-input" class="input-label">Alt Text</label>
+            <label for="alt-text-input" class="input-label">
+              Alt Text
+              <span class="info-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <div class="tooltip">
+                  A short description used by screen readers and search engines to explain the content or function of an
+                  image. It also appears if the image fails to load.
+                </div>
+              </span>
+            </label>
             <div class="input-group">
               <textarea id="alt-text-input" class="form-textarea"
                 placeholder="Every image tells a short story. Share it for those who can't see the pixels..."
                 rows="2"></textarea>
-              <button class="btn btn-icon ai-generate-btn" id="generate-btn" title="Generate with AI">
-                <svg id="icon-sparkle" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path
-                    d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-                  <path d="M5 3v4" />
-                  <path d="M19 17v4" />
-                  <path d="M3 5h4" />
-                  <path d="M17 19h4" />
-                </svg>
-                <svg id="icon-enhance" class="icon-hidden-transition" xmlns="http://www.w3.org/2000/svg" width="20"
-                  height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path
-                    d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72" />
-                  <path d="m14 7 3 3" />
-                  <path d="M5 6v4" />
-                  <path d="M19 14v4" />
-                  <path d="M10 2v2" />
-                  <path d="M7 8H3" />
-                  <path d="M21 16h-4" />
-                  <path d="M11 3H9" />
-                </svg>
-                <div class="loader hidden" id="generate-loader"></div>
-              </button>
+              <div class="ai-btn-tooltip-wrapper">
+                <button class="btn btn-icon ai-generate-btn" id="generate-btn">
+                  <svg id="icon-sparkle" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                      d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                    <path d="M5 3v4" />
+                    <path d="M19 17v4" />
+                    <path d="M3 5h4" />
+                    <path d="M17 19h4" />
+                  </svg>
+                  <svg id="icon-enhance" class="icon-hidden-transition" xmlns="http://www.w3.org/2000/svg" width="20"
+                    height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                      d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72" />
+                    <path d="m14 7 3 3" />
+                    <path d="M5 6v4" />
+                    <path d="M19 14v4" />
+                    <path d="M10 2v2" />
+                    <path d="M7 8H3" />
+                    <path d="M21 16h-4" />
+                    <path d="M11 3H9" />
+                  </svg>
+                  <div class="loader hidden" id="generate-loader"></div>
+                </button>
+                <div class="tooltip" id="ai-btn-tooltip">Generate with AI</div>
+              </div>
               <div id="witty-bubble" class="witty-bubble hidden"></div>
               <div class="history-stepper hidden" id="history-stepper">
                 <button class="btn btn-icon stepper-btn" id="history-prev" title="Previous version (Up Arrow at start)">
