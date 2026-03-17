@@ -395,9 +395,10 @@
 
       <div class="bts-card" data-bts="temporal">
         <h3>Temporal Illusion</h3>
-        <p>If the AI result is cached, we add a random "artificial delay." Paradoxically, if the result
-          appears instantly, users might not notice it and often trust it less. The delay ensures that the UX is
-          consistent with the user's mental model.</p>
+        <p>If the AI result is cached or came back "too fast", we padd the the rendering with an "artificial" delay.
+          Paradoxically, if the result appears too quickly, users might not notice it and often trust it less.
+          The delay ensures that the UX is consistent with the user's mental model and regardless of the actual
+          processing time.</p>
         <div class="bts-card-controls temporal-controls">
           <div class="range-bounds">
             <span>0s</span>
