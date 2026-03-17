@@ -28,9 +28,9 @@ export function setupBTSEventListeners() {
 
   // Close panel on clicking outside
   document.addEventListener('click', (e) => {
-    if (DOM.btsPanel.classList.contains('show') && 
-        !DOM.btsPanel.contains(e.target) && 
-        !DOM.btsToggle.contains(e.target)) {
+    if (DOM.btsPanel.classList.contains('show') &&
+      !DOM.btsPanel.contains(e.target) &&
+      !DOM.btsToggle.contains(e.target)) {
       if (!DOM.btsPanel.classList.contains('pinned')) {
         DOM.btsPanel.classList.remove('show');
       }
@@ -181,13 +181,13 @@ export function setupBTSEventListeners() {
       state.settings.enableTransitions = e.target.checked;
     });
   }
-  
+
   if (DOM.toggleSimulateAIFail) {
     DOM.toggleSimulateAIFail.addEventListener('change', (e) => {
       state.settings.simulateAIFail = e.target.checked;
-      
+
       const empatheticAICard = e.target.closest('.bts-card');
-      
+
       // Clear input and history so placeholder is visible immediately
       DOM.altTextInput.value = "";
       state.lastGeneratedAltText = "";
@@ -211,7 +211,7 @@ export function setupBTSEventListeners() {
         if (state.settings.useBlandPlaceholder) {
           DOM.altTextInput.placeholder = "Type description here.";
         } else {
-          DOM.altTextInput.placeholder = "Every image tells a short story. Write it for those who can't see the pixels...";
+          DOM.altTextInput.placeholder = "Every image tells a short story. Share it for those who can't see the pixels...";
         }
         checkAIAvailability();
       }
@@ -221,9 +221,9 @@ export function setupBTSEventListeners() {
   if (DOM.toggleBlandPlaceholder) {
     DOM.toggleBlandPlaceholder.addEventListener('change', (e) => {
       state.settings.useBlandPlaceholder = e.target.checked;
-      
+
       const empatheticUICard = e.target.closest('.bts-card');
-      
+
       // Clear input and history so placeholder is visible immediately
       DOM.altTextInput.value = "";
       state.lastGeneratedAltText = "";
@@ -239,7 +239,7 @@ export function setupBTSEventListeners() {
         if (state.settings.simulateAIFail) {
           DOM.altTextInput.placeholder = "Even AI can't see these pixels. Tell the story for everyone—and everything—who can't see pixels.";
         } else {
-          DOM.altTextInput.placeholder = "Every image tells a short story. Write it for those who can't see the pixels...";
+          DOM.altTextInput.placeholder = "Every image tells a short story. Share it for those who can't see the pixels...";
         }
       }
     });
@@ -310,7 +310,7 @@ export function updateTemporalLatestUI() {
 
   const maxRange = parseInt(DOM.temporalMin.max);
   const percent = (state.temporal.latestDelay / maxRange) * 100;
-  
+
   DOM.temporalSliderLatest.style.left = `${percent}%`;
   DOM.temporalSliderLatest.classList.remove('hidden');
 }

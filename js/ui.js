@@ -111,12 +111,18 @@ export function updateGenerateButtonUI(targetText = null) {
   const textToCheck = targetText !== null ? targetText : DOM.altTextInput.value;
 
   if (isUserEdit && textToCheck.trim() !== "") {
-    if (DOM.iconSparkle) DOM.iconSparkle.classList.add('hidden');
-    if (DOM.iconEnhance) DOM.iconEnhance.classList.remove('hidden');
+    if (DOM.iconSparkle) DOM.iconSparkle.classList.add('icon-hidden-transition');
+    if (DOM.iconEnhance) {
+      DOM.iconEnhance.classList.remove('icon-hidden-transition');
+      DOM.iconEnhance.classList.remove('hidden');
+    }
     DOM.generateBtn.title = `Refine with AI ${shortcut}`;
   } else {
-    if (DOM.iconEnhance) DOM.iconEnhance.classList.add('hidden');
-    if (DOM.iconSparkle) DOM.iconSparkle.classList.remove('hidden');
+    if (DOM.iconEnhance) DOM.iconEnhance.classList.add('icon-hidden-transition');
+    if (DOM.iconSparkle) {
+      DOM.iconSparkle.classList.remove('icon-hidden-transition');
+      DOM.iconSparkle.classList.remove('hidden');
+    }
     DOM.generateBtn.title = `Generate with AI ${shortcut}`;
   }
 }
@@ -181,7 +187,7 @@ export async function handleSmartFallback() {
   if (state.cachedAltText) {
     console.log("BTS: Smart Fallback - Rescuing from local cache.");
     fallbackText = state.cachedAltText;
-    
+
     // Track time saved
     consumeSavings();
 
@@ -190,7 +196,7 @@ export async function handleSmartFallback() {
   }
   else if (state.activeInferencePromise) {
     console.log("BTS: Smart Fallback - Waiting for in-flight inference.");
-    
+
     // Track time saved
     consumeSavings();
 
@@ -206,7 +212,7 @@ export async function handleSmartFallback() {
     // if (currentText && (history.currentIndex === -1 || history.stack[history.currentIndex] !== currentText)) { history.push(currentText); }
     // which prevents the initial empty state from being pushed. But we often want
     // the very first result to be recorded!
-    
+
     // Instead of pushing the (empty) currentText, we just proceed. The fallback text 
     // gets pushed at the end of this block anyway!
 
@@ -249,16 +255,18 @@ export function hideProgressUI(delay = 0) {
 }
 
 export function triggerDoubleTakeAnimation(wittyMessage) {
-  const wasRefine = DOM.iconEnhance && !DOM.iconEnhance.classList.contains('hidden');
-  const activeIcon = wasRefine ? DOM.iconEnhance : DOM.iconSparkle;
-  const inactiveIcon = wasRefine ? DOM.iconSparkle : DOM.iconEnhance;
+  const isSparkleHidden = DOM.iconSparkle && (DOM.iconSparkle.classList.contains('hidden') || DOM.iconSparkle.classList.contains('icon-hidden-transition'));
+  const wasRefine = !isSparkleHidden && DOM.iconEnhance && !DOM.iconEnhance.classList.contains('hidden') && !DOM.iconEnhance.classList.contains('icon-hidden-transition');
+  // If sparkle wasn't hidden, it was active. If it was hidden, enhance was likely active.
+  const activeIcon = isSparkleHidden ? DOM.iconEnhance : DOM.iconSparkle;
+  const inactiveIcon = isSparkleHidden ? DOM.iconSparkle : DOM.iconEnhance;
 
   if (activeIcon) {
-     activeIcon.classList.remove('hidden');
-     if (inactiveIcon) inactiveIcon.classList.add('hidden');
-     activeIcon.classList.remove('icon-double-take');
-     void activeIcon.offsetWidth; // trigger reflow
-     activeIcon.classList.add('icon-double-take');
+    activeIcon.classList.remove('hidden');
+    if (inactiveIcon) inactiveIcon.classList.add('hidden');
+    activeIcon.classList.remove('icon-double-take');
+    void activeIcon.offsetWidth; // trigger reflow
+    activeIcon.classList.add('icon-double-take');
   }
 
   DOM.altTextInput.classList.remove('text-wave');
@@ -268,28 +276,28 @@ export function triggerDoubleTakeAnimation(wittyMessage) {
   DOM.altTextInput.classList.add('text-wave');
 
   if (DOM.historyIndex) {
-     DOM.historyIndex.classList.remove('history-index-pulse');
-     void DOM.historyIndex.offsetWidth; // trigger reflow
-     DOM.historyIndex.classList.add('history-index-pulse');
+    DOM.historyIndex.classList.remove('history-index-pulse');
+    void DOM.historyIndex.offsetWidth; // trigger reflow
+    DOM.historyIndex.classList.add('history-index-pulse');
   }
 
   if (DOM.wittyBubble && wittyMessage) {
-     DOM.wittyBubble.textContent = wittyMessage;
-     DOM.wittyBubble.classList.remove('hidden');
-     DOM.wittyBubble.classList.remove('bubble-pop');
-     void DOM.wittyBubble.offsetWidth; // trigger reflow
-     DOM.wittyBubble.classList.add('bubble-pop');
+    DOM.wittyBubble.textContent = wittyMessage;
+    DOM.wittyBubble.classList.remove('hidden');
+    DOM.wittyBubble.classList.remove('bubble-pop');
+    void DOM.wittyBubble.offsetWidth; // trigger reflow
+    DOM.wittyBubble.classList.add('bubble-pop');
   }
 
   setTimeout(() => {
-     DOM.altTextInput.classList.remove('text-wave');
-     if (activeIcon) activeIcon.classList.remove('icon-double-take');
-     if (DOM.historyIndex) DOM.historyIndex.classList.remove('history-index-pulse');
-     if (DOM.wittyBubble) {
-       DOM.wittyBubble.classList.remove('bubble-pop');
-       DOM.wittyBubble.classList.add('hidden');
-     }
-     updateGenerateButtonUI(); 
+    DOM.altTextInput.classList.remove('text-wave');
+    if (activeIcon) activeIcon.classList.remove('icon-double-take');
+    if (DOM.historyIndex) DOM.historyIndex.classList.remove('history-index-pulse');
+    if (DOM.wittyBubble) {
+      DOM.wittyBubble.classList.remove('bubble-pop');
+      DOM.wittyBubble.classList.add('hidden');
+    }
+    updateGenerateButtonUI();
   }, 2500);
 }
 

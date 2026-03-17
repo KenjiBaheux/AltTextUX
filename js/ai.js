@@ -383,7 +383,7 @@ export async function generateAltText() {
   DOM.generateBtn.disabled = true;
   DOM.altTextInput.disabled = true; 
   const currentIcon = state.originalAltText ? DOM.iconEnhance : DOM.iconSparkle;
-  if (currentIcon) currentIcon.classList.add('hidden');
+  if (currentIcon) currentIcon.classList.add('icon-hidden-transition');
 
   state.isGenerating = true;
   updateShareButtonState();
