@@ -37,7 +37,7 @@ export const state = {
   },
   temporal: {
     minDelay: 1000,
-    maxDelay: 3000,
+    maxDelay: 2500,
     latestDelay: null
   },
   metrics: {

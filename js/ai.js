@@ -108,62 +108,77 @@ export async function prepareAISession(forceNew = false) {
   }
 
   state.aiSessionPromise = (async () => {
-    try {
-      // Create session allowing image input and text output
-      const session = await window.LanguageModel.create({
-        monitor(m) {
-          let progressEventsCount = 0;
-          m.addEventListener('downloadprogress', (e) => {
-            progressEventsCount++;
-            state.isModelDownloading = true; // Legitimately downloading!
+    const MAX_RETRIES = 3;
+    let attempt = 0;
 
-            if (e.loaded < e.total && progressEventsCount > 3) {
-              showProgressUI();
+    while (attempt <= MAX_RETRIES) {
+      try {
+        // Create session allowing image input and text output
+        const session = await window.LanguageModel.create({
+          monitor(m) {
+            let progressEventsCount = 0;
+            m.addEventListener('downloadprogress', (e) => {
+              progressEventsCount++;
+              state.isModelDownloading = true; // Legitimately downloading!
 
-              // Only update the label to "Downloading" if we prove we're getting real bytes
-              updateStatus('downloading', 'Downloading AI Model...');
+              if (e.loaded < e.total && progressEventsCount > 3) {
+                showProgressUI();
 
-              // Ensure badge is visible so they see the downloading label
-              if (!state.isBadgeResolved) {
-                state.isBadgeResolved = true;
-                const container = document.querySelector('.status-badge-container');
-                if (container) container.classList.add('resolved');
+                // Only update the label to "Downloading" if we prove we're getting real bytes
+                updateStatus('downloading', 'Downloading AI Model...');
+
+                // Ensure badge is visible so they see the downloading label
+                if (!state.isBadgeResolved) {
+                  state.isBadgeResolved = true;
+                  const container = document.querySelector('.status-badge-container');
+                  if (container) container.classList.add('resolved');
+                }
               }
-            }
-            if (e.total) {
-              const percent = e.total ? Math.round((e.loaded / e.total) * 100) : 0;
-              showProgressUI(percent);
+              if (e.total) {
+                const percent = e.total ? Math.round((e.loaded / e.total) * 100) : 0;
+                showProgressUI(percent);
 
-              if (percent >= 100) {
-                hideProgressUI(500);
+                if (percent >= 100) {
+                  hideProgressUI(500);
+                }
               }
+            });
+          },
+          initialPrompts: [
+            {
+              role: "system",
+              content: PROMPTS.SYSTEM
             }
-          });
-        },
-        initialPrompts: [
-          {
-            role: "system",
-            content: PROMPTS.SYSTEM
-          }
-        ],
-        expectedInputs: [
-          { type: "image" },
-          { type: "text", languages: ["en"] /* fallback/system prompt lang */ }
-        ],
-        expectedOutputs: [
-          { type: "text", languages: ["en"] }
-        ]
-      });
-      state.aiSession = session;
+          ],
+          expectedInputs: [
+            { type: "image" },
+            { type: "text", languages: ["en"] /* fallback/system prompt lang */ }
+          ],
+          expectedOutputs: [
+            { type: "text", languages: ["en"] }
+          ]
+        });
+        state.aiSession = session;
 
-      updateStatus('available', 'AI Ready');
-      return session;
-    } catch (error) {
-      console.error("Failed to create session", error);
-      updateStatus('unavailable', 'Failed to load model');
-      showUnavailableState();
-      state.aiSessionPromise = null; // Reset so next call can retry
-      throw error;
+        updateStatus('available', 'AI Ready');
+        return session;
+      } catch (error) {
+        attempt++;
+        const isTransient = error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed'));
+        
+        if (isTransient && attempt <= MAX_RETRIES) {
+          const delay = Math.pow(2, attempt - 1) * 500;
+          console.warn(`Failed to create AI session (attempt ${attempt}/${MAX_RETRIES + 1}). Retrying in ${delay}ms...`, error);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        console.error("Failed to create session after retries", error);
+        updateStatus('unavailable', 'Failed to load model');
+        showUnavailableState();
+        state.aiSessionPromise = null; // Reset so next call can retry
+        throw error;
+      }
     }
   })();
 

@@ -291,7 +291,7 @@ function initTemporalSlider() {
   if (DOM.temporalResetBtn) {
     DOM.temporalResetBtn.addEventListener('click', () => {
       DOM.temporalMin.value = 1000;
-      DOM.temporalMax.value = 3000;
+      DOM.temporalMax.value = 2500;
       updateSliderUI();
     });
   }
