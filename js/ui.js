@@ -101,7 +101,7 @@ export function updateGenerateButtonState() {
 }
 
 export function updateGenerateButtonUI(targetText = null) {
-  if (!DOM.generateBtn || DOM.generateBtn.disabled) return;
+  if (!DOM.generateBtn) return;
 
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const shortcut = isMac ? '(Cmd+Enter)' : '(Ctrl+Enter)';
@@ -116,14 +116,14 @@ export function updateGenerateButtonUI(targetText = null) {
       DOM.iconEnhance.classList.remove('icon-hidden-transition');
       DOM.iconEnhance.classList.remove('hidden');
     }
-    DOM.generateBtn.title = `Refine with AI ${shortcut}`;
+    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = `Refine with AI ${shortcut}`;
   } else {
     if (DOM.iconEnhance) DOM.iconEnhance.classList.add('icon-hidden-transition');
     if (DOM.iconSparkle) {
       DOM.iconSparkle.classList.remove('icon-hidden-transition');
       DOM.iconSparkle.classList.remove('hidden');
     }
-    DOM.generateBtn.title = `Generate with AI ${shortcut}`;
+    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = `Generate with AI ${shortcut}`;
   }
 }
 

@@ -9,6 +9,7 @@ export const DOM = {
   imagePreview: document.getElementById('image-preview'),
   removeBtn: document.getElementById('remove-btn'),
   generateBtn: document.getElementById('generate-btn'),
+  aiBtnTooltip: document.getElementById('ai-btn-tooltip'),
   generateLoader: document.getElementById('generate-loader'),
   iconSparkle: document.getElementById('icon-sparkle'),
   iconEnhance: document.getElementById('icon-enhance'),
