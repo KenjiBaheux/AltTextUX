@@ -165,7 +165,7 @@ export async function prepareAISession(forceNew = false) {
       } catch (error) {
         attempt++;
         const isTransient = error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed'));
-        
+
         if (isTransient && attempt <= MAX_RETRIES) {
           const delay = Math.pow(2, attempt - 1) * 500;
           console.warn(`Failed to create AI session (attempt ${attempt}/${MAX_RETRIES + 1}). Retrying in ${delay}ms...`, error);
@@ -293,7 +293,7 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
       const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal: state.inferenceAbortController.signal });
       const duration = performance.now() - state.inferenceStartTimes.get(metricType);
       recordInferenceDuration(metricType, duration);
-      
+
       state.cachedAltText = result;
       state.cachedHint = normalizedHint;
       notifyBTS(btsType, 'end');
@@ -384,11 +384,11 @@ export async function generateAltText() {
   // If the current text is an AI entry from history, we shouldn't treat it as a user hint
   const currentEntry = history.stack[history.currentIndex];
   state.originalAltText = (currentEntry && currentEntry.isAI && rawInput === currentEntry.text) ? "" : rawInput;
-  
+
   // Rule 2 & 3: Generate and Refine always insert a new entry.
   // We handle the shimmer visually without hacking the history stack in ai.js.
   // history.js will handle the actual stack manipulation.
-  
+
   if (state.originalAltText) {
     DOM.altTextInput.classList.add('text-shimmer');
   }
@@ -396,7 +396,7 @@ export async function generateAltText() {
   clearErrorState();
 
   DOM.generateBtn.disabled = true;
-  DOM.altTextInput.disabled = true; 
+  DOM.altTextInput.disabled = true;
   const currentIcon = state.originalAltText ? DOM.iconEnhance : DOM.iconSparkle;
   if (currentIcon) currentIcon.classList.add('icon-hidden-transition');
 
@@ -448,7 +448,7 @@ export async function generateAltText() {
       }
       state.activeInferencePromise = null;
       state.activeInferenceHint = null;
-      
+
       clearUnconsumedSavings();
 
       try {
@@ -525,16 +525,16 @@ export async function generateAltText() {
     }
 
     const existingIndex = history.stack.findIndex(entry => entry.isAI && entry.text === resultText);
-    
+
     if (existingIndex !== -1) {
       console.log(`History: Match found for AI generated text at index ${existingIndex}. Triggering Double-Take.`);
-      
+
       // Navigate history to the existing matching entry
       history.currentIndex = existingIndex;
       history.applyCurrent();
 
       const WITTY_MESSAGES = [
-        "Nailed it twice.",
+        "Nailed it, twice!",
         "Still perfection.",
         "Encore!",
         "I’m my own favorite.",
@@ -547,7 +547,7 @@ export async function generateAltText() {
         "Too good to change.",
         "If it ain't broke..."
       ];
-      
+
       const wittyMessage = WITTY_MESSAGES[Math.floor(Math.random() * WITTY_MESSAGES.length)];
       triggerDoubleTakeAnimation(wittyMessage);
 
@@ -572,7 +572,7 @@ export async function generateAltText() {
     }
 
   } catch (error) {
-    if (error.name === 'AbortError') return; 
+    if (error.name === 'AbortError') return;
 
     console.error("Generation error:", error);
 
@@ -588,9 +588,9 @@ export async function generateAltText() {
     DOM.altTextInput.classList.remove('text-shimmer');
     DOM.altTextInput.classList.remove('text-dimming');
     DOM.generateBtn.disabled = false;
-    DOM.altTextInput.disabled = false; 
+    DOM.altTextInput.disabled = false;
     DOM.generateLoader.classList.add('hidden');
-    updateGenerateButtonUI(); 
+    updateGenerateButtonUI();
     state.isGenerating = false;
     updateShareButtonState();
     history.updateUI(); // Unlock history navigation buttons
