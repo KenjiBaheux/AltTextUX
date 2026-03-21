@@ -537,7 +537,7 @@ export async function generateAltText() {
         "Nailed it, twice!",
         "Still perfection.",
         "Encore!",
-        "I’m my own favorite.",
+        "I'm my own favorite.",
         "Deja vu?",
         "Staying on message.",
         "Cache hit!",
