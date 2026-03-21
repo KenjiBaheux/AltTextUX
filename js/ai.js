@@ -390,13 +390,11 @@ export async function generateAltText() {
   state.originalAltText = (currentEntry && currentEntry.isAI && rawInput === currentEntry.text) ? "" : rawInput;
 
   // Rule 2 & 3: Generate and Refine always insert a new entry.
-  // We handle the shimmer visually without hacking the history stack in ai.js.
-  // history.js will handle the actual stack manipulation.
+  // We handle the shimmer visually by pushing a loading entry right away.
+  history.prepareForAI(state.originalAltText);
 
-  if (state.originalAltText) {
-    DOM.altTextInput.classList.add('text-shimmer');
-  }
-
+  // After preparing, the new entry is current and empty.
+  DOM.altTextInput.classList.add('text-shimmer');
   clearErrorState();
 
   DOM.altTextInput.disabled = true;
@@ -539,7 +537,8 @@ export async function generateAltText() {
     if (existingIndex !== -1) {
       console.log(`History: Match found for AI generated text at index ${existingIndex}. Triggering Double-Take.`);
 
-      // Navigate history to the existing matching entry
+      // If we found a match, remove the loading entry and go to the match
+      history.cancelAI();
       history.currentIndex = existingIndex;
       history.applyCurrent();
 
@@ -565,8 +564,8 @@ export async function generateAltText() {
       startProactiveGeneration(resultText, null, true);
 
     } else {
-      // Insert the new AI generated text into history
-      history.pushAIResult(resultText, state.originalAltText);
+      // Update the current loading entry with the final AI result
+      history.finalizeAI(resultText);
 
       state.lastGeneratedAltText = resultText;
 
@@ -579,14 +578,21 @@ export async function generateAltText() {
         DOM.altTextInput.classList.remove('text-dimming');
         await typeWriterEffect(resultText, signal);
       }
-    }
 
+      // If the animation was aborted, sync the partial output to history so it doesn't "snap" to full result on return
+      if (signal && signal.aborted) {
+        history.updateCurrent(DOM.altTextInput.value, true);
+      }
+    }
+  } catch (error) {
     if (error.name === 'AbortError') {
       console.log("Generation aborted by user");
+      history.cancelAI();
       return;
     }
 
     console.error("Generation error:", error);
+    history.cancelAI();
 
     if (error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed'))) {
       state.aiSession = null;
