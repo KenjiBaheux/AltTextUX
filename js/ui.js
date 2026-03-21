@@ -106,6 +106,11 @@ export function updateGenerateButtonUI(targetText = null) {
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const shortcut = isMac ? '(Cmd+Enter)' : '(Ctrl+Enter)';
 
+  if (state.isGenerating) {
+    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = "Abort task (Esc)";
+    return;
+  }
+
   const currentEntry = history.stack[history.currentIndex];
   const isUserEdit = currentEntry && !currentEntry.isAI && history.currentIndex > 0;
   const textToCheck = targetText !== null ? targetText : DOM.altTextInput.value;

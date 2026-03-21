@@ -402,6 +402,7 @@ export async function generateAltText() {
 
   state.isGenerating = true;
   updateShareButtonState();
+  updateGenerateButtonUI();
   history.updateUI(); // Lock history navigation buttons
   notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'start');
 
@@ -590,8 +591,8 @@ export async function generateAltText() {
     DOM.generateBtn.disabled = false;
     DOM.altTextInput.disabled = false;
     DOM.generateLoader.classList.add('hidden');
-    updateGenerateButtonUI();
     state.isGenerating = false;
+    updateGenerateButtonUI();
     updateShareButtonState();
     history.updateUI(); // Unlock history navigation buttons
 

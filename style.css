@@ -1039,6 +1039,34 @@ a:hover {
   flex-shrink: 0;
 }
 
+/* Stop Button transformation for AI Generate Button */
+.ai-generate-btn .loader {
+  width: 12px;
+  height: 12px;
+  background-color: #a855f7;
+  border: none;
+  border-radius: 2px;
+  animation: shimmer 1.5s infinite ease-in-out;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
+}
+
+.ai-generate-btn:hover .loader {
+  background-color: var(--error) !important;
+  box-shadow: 0 0 12px var(--error);
+}
+
+@keyframes shimmer {
+  0%, 100% { 
+    opacity: 0.8; 
+    transform: scale(0.95); 
+  }
+  50% { 
+    opacity: 1; 
+    transform: scale(1.1); 
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+  }
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
