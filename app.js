@@ -2,7 +2,7 @@ import { DOM } from './js/dom.js';
 import { state } from './js/state.js';
 import { history } from './js/history.js';
 import { setupBTSEventListeners, setBTSState, notifyBTS } from './js/bts.js';
-import { checkAIAvailability, triggerModelDownload, cleanupAISession, prewarmWithSampleImage, startProactiveGeneration, generateAltText, prepareAISession } from './js/ai.js';
+import { checkAIAvailability, triggerModelDownload, cleanupAISession, prewarmWithSampleImage, startProactiveGeneration, generateAltText, prepareAISession, abortGeneration } from './js/ai.js';
 import { handleFileSelected, showPreview, hidePreview, updateShareButtonState, handleShareClick, closeSuccessOverlay, updateGenerateButtonUI, handleSmartFallback } from './js/ui.js';
 import { handleAppShare, generateICSReminder } from './js/actions.js';
 
@@ -176,6 +176,18 @@ function setupEventListeners() {
         e.preventDefault();
         notifyBTS('versioning', 'pulse');
       }
+    }
+
+    if (e.key === 'Escape') {
+      if (state.isGenerating || state.isAnimating) {
+        abortGeneration();
+      }
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && (state.isGenerating || state.isAnimating)) {
+      abortGeneration();
     }
   });
 

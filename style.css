@@ -708,8 +708,9 @@ a:hover {
   transform: scale(1) rotate(0deg);
 }
 
-.ai-generate-btn svg.icon-hidden-transition {
-  opacity: 0;
+.ai-generate-btn svg.icon-hidden-transition,
+.ai-generate-btn.loading svg {
+  opacity: 0 !important;
   transform: scale(0.3) rotate(-90deg);
   pointer-events: none;
 }

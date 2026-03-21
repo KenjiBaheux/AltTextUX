@@ -375,6 +375,10 @@ export async function prewarmWithSampleImage() {
 }
 
 export async function generateAltText() {
+  if (state.isGenerating) {
+    abortGeneration();
+    return;
+  }
   if (!state.currentImageSource || !state.aiAvailable) return;
 
   state.wasAltTextManuallyCleared = false;
@@ -395,7 +399,6 @@ export async function generateAltText() {
 
   clearErrorState();
 
-  DOM.generateBtn.disabled = true;
   DOM.altTextInput.disabled = true;
   const currentIcon = state.originalAltText ? DOM.iconEnhance : DOM.iconSparkle;
   if (currentIcon) currentIcon.classList.add('icon-hidden-transition');
@@ -407,6 +410,12 @@ export async function generateAltText() {
   notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'start');
 
   DOM.generateLoader.classList.remove('hidden');
+
+  if (state.generationAbortController) {
+    state.generationAbortController.abort();
+  }
+  state.generationAbortController = new AbortController();
+  const signal = state.generationAbortController.signal;
 
   let loadingManager = null;
   if (!state.originalAltText) {
@@ -500,7 +509,7 @@ export async function generateAltText() {
       }
 
       try {
-        resultText = await clone.prompt([{ role: "user", content: promptMessage }]);
+        resultText = await clone.prompt([{ role: "user", content: promptMessage }], { signal });
       } finally {
         recordLossEnd();
         clone.destroy();
@@ -565,15 +574,17 @@ export async function generateAltText() {
 
       if (state.originalAltText && DOM.altTextInput.classList.contains('text-shimmer')) {
         DOM.altTextInput.classList.remove('text-shimmer');
-        await rewriteTextEffect(DOM.altTextInput, resultText);
+        await rewriteTextEffect(DOM.altTextInput, resultText, false, signal);
       } else {
         DOM.altTextInput.classList.remove('text-dimming');
-        await typeWriterEffect(resultText);
+        await typeWriterEffect(resultText, signal);
       }
     }
 
-  } catch (error) {
-    if (error.name === 'AbortError') return;
+    if (error.name === 'AbortError') {
+      console.log("Generation aborted by user");
+      return;
+    }
 
     console.error("Generation error:", error);
 
@@ -588,10 +599,10 @@ export async function generateAltText() {
     }
     DOM.altTextInput.classList.remove('text-shimmer');
     DOM.altTextInput.classList.remove('text-dimming');
-    DOM.generateBtn.disabled = false;
     DOM.altTextInput.disabled = false;
     DOM.generateLoader.classList.add('hidden');
     state.isGenerating = false;
+    state.generationAbortController = null;
     updateGenerateButtonUI();
     updateShareButtonState();
     history.updateUI(); // Unlock history navigation buttons
@@ -603,6 +614,13 @@ export async function generateAltText() {
     }
 
     notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'end');
+  }
+}
+
+export function abortGeneration() {
+  if (state.generationAbortController) {
+    state.generationAbortController.abort();
+    state.generationAbortController = null;
   }
 }
 

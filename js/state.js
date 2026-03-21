@@ -20,6 +20,7 @@ export const state = {
   activeInferencePromise: null,
   activeInferenceHint: null,
   inferenceAbortController: null,
+  generationAbortController: null,
   prewarmAbortController: null,
   prewarmPromise: null,
   currentProactiveImageSrc: null,
