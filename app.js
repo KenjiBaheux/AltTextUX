@@ -278,12 +278,24 @@ async function init() {
   setBTSState('welcome');
 
   if (state.aiAvailable && !DOM.imagePreview.src.includes('data:')) {
-    if (prewarmWithSampleImage()) {
-      notifyBTS('prewarm');
-    } else if (!state.sampleImageAltText) {
-      notifyBTS('proactive-1');
+    try {
+      if (prewarmWithSampleImage()) {
+        notifyBTS('prewarm');
+      } else if (!state.sampleImageAltText) {
+        notifyBTS('proactive-1');
+      }
+    } catch (e) {
+      console.error("Failed to start prewarming:", e);
     }
   }
 }
+
+// Safety net for any AI promises that might escape local catch blocks
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason && (event.reason.name === 'UnknownError' || event.reason.name === 'InvalidStateError')) {
+    console.warn("Caught unhandled AI rejection:", event.reason);
+    event.preventDefault(); // Prevent console noise if we're handling it
+  }
+});
 
 init();

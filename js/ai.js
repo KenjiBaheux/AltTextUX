@@ -7,6 +7,38 @@ import { typeWriterEffect, rewriteTextEffect, LoadingMessageManager, ensureImage
 import { recordInferenceStart, recordInferenceDuration, consumeSavings, clearUnconsumedSavings, recordLossStart, recordLossEnd } from './metrics.js';
 import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI, showProgressUI, hideProgressUI, triggerDoubleTakeAnimation, showErrorState, showUnavailableState, clearErrorState } from './ui.js';
 
+function handleAIError(error, context, originalAltText = null) {
+  if (error.name === 'AbortError') {
+    return; // Don't show error UI for user-initiated aborts
+  }
+
+  console.error(`AI Error in ${context}:`, error);
+
+  const isTransient = error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed')) || (error.name === 'UnknownError' && error.message.includes('generic failures occurred'));
+  
+  if (isTransient) {
+    state.aiSession = null;
+    state.aiSessionPromise = null;
+  }
+
+  showErrorState(originalAltText);
+}
+
+function validateAIInput(imageSource, hint = "") {
+  if (!imageSource) {
+    throw new Error("InvalidStateError: No image source provided.");
+  }
+  if (imageSource instanceof HTMLImageElement) {
+    if (imageSource.naturalWidth === 0) {
+      throw new Error("InvalidStateError: Image source is not usable (naturalWidth is 0).");
+    }
+  }
+  if (hint !== null && typeof hint !== 'string' && typeof hint !== 'undefined') {
+    throw new Error("InvalidStateError: Hint must be a string.");
+  }
+  return true;
+}
+
 export async function checkAIAvailability() {
   if (!window.LanguageModel) {
     updateStatus('unavailable', 'AI API not found');
@@ -174,9 +206,8 @@ export async function prepareAISession(forceNew = false) {
         }
 
         console.error("Failed to create session after retries", error);
-        updateStatus('unavailable', 'Failed to load model');
-        showUnavailableState();
         state.aiSessionPromise = null; // Reset so next call can retry
+        handleAIError(error, "prepareAISession");
         throw error;
       }
     }
@@ -259,6 +290,13 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
   const session = await prepareAISession();
   if (!session) return;
 
+  try {
+    validateAIInput(targetImageSource, normalizedHint);
+  } catch (e) {
+    handleAIError(e, "startProactiveGeneration");
+    return;
+  }
+
   state.inferenceAbortController = new AbortController();
   state.activeInferenceHint = normalizedHint;
   state.currentProactiveImageSrc = targetImageSource;
@@ -300,9 +338,9 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
       return result;
     } catch (error) {
       notifyBTS(normalizedHint ? 'guidance' : 'proactive-1', 'end');
-      // Ignore abort errors
+      
       if (error.name !== 'AbortError') {
-        console.error("Proactive generation failed:", error);
+        handleAIError(error, "startProactiveGeneration");
       }
       if (state.unconsumedSavings && state.unconsumedSavings.type === metricType && !state.unconsumedSavings.duration) {
         clearUnconsumedSavings();
@@ -332,6 +370,13 @@ export async function prewarmWithSampleImage() {
   const session = await prepareAISession();
   if (!session) return;
 
+  try {
+    validateAIInput(DOM.sampleImageSource);
+  } catch (e) {
+    handleAIError(e, "prewarmWithSampleImage");
+    return;
+  }
+
   state.prewarmAbortController = new AbortController();
   console.log("BTS: Starting Warm-up Lap with sample image.");
   notifyBTS('prewarm');
@@ -358,7 +403,7 @@ export async function prewarmWithSampleImage() {
     } catch (error) {
       notifyBTS('prewarm', 'end');
       if (error.name !== 'AbortError') {
-        console.error("Warm-up Lap failed:", error);
+        handleAIError(error, "prewarmWithSampleImage");
       }
       if (state.unconsumedSavings && state.unconsumedSavings.type === 'prewarm' && !state.unconsumedSavings.duration) {
         clearUnconsumedSavings();
@@ -393,7 +438,7 @@ export async function generateAltText() {
   // We handle the shimmer visually by pushing a loading entry right away.
   history.prepareForAI(state.originalAltText);
 
-  // After preparing, the new entry is current and empty.
+  // After preparing, the new entry is current and contains the original text if refining.
   DOM.altTextInput.classList.add('text-shimmer');
   clearErrorState();
 
@@ -507,6 +552,7 @@ export async function generateAltText() {
       }
 
       try {
+        validateAIInput(state.currentImageSource, state.originalAltText);
         resultText = await clone.prompt([{ role: "user", content: promptMessage }], { signal });
       } finally {
         recordLossEnd();
@@ -522,10 +568,20 @@ export async function generateAltText() {
 
     if (remainingDelay > 0) {
       notifyBTS('temporal');
-      await new Promise(resolve => setTimeout(resolve, remainingDelay));
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(resolve, remainingDelay);
+        signal.addEventListener('abort', () => {
+          clearTimeout(timeout);
+          reject(new DOMException("AbortError", "AbortError"));
+        }, { once: true });
+      });
     } else {
       state.temporal.latestDelay = 0;
       updateTemporalLatestUI();
+    }
+
+    if (signal.aborted) {
+      throw new DOMException("AbortError", "AbortError");
     }
 
     if (loadingManager) {
@@ -591,14 +647,7 @@ export async function generateAltText() {
       return;
     }
 
-    console.error("Generation error:", error);
-    history.cancelAI();
-
-    if (error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed'))) {
-      state.aiSession = null;
-    }
-
-    showErrorState(state.originalAltText);
+    handleAIError(error, "generateAltText", state.originalAltText);
   } finally {
     if (loadingManager) {
       loadingManager.stop();

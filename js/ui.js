@@ -225,6 +225,7 @@ export async function handleSmartFallback() {
 
     state.isGenerating = true;
     updateShareButtonState();
+    history.updateUI();
     state.lastGeneratedAltText = fallbackText;
 
     notifyBTS('fallback', 'pulse');
@@ -239,6 +240,7 @@ export async function handleSmartFallback() {
 
     state.isGenerating = false;
     updateShareButtonState();
+    history.updateUI();
   }
 }
 
@@ -312,7 +314,7 @@ export function showErrorState(originalAltText) {
   updateStatus('error', 'AI Failed');
   DOM.altTextInput.parentElement.classList.add('error-caution');
 
-  if (originalAltText === "") {
+  if (!originalAltText) {
     DOM.altTextInput.placeholder = "Even AI can't see these pixels. Tell the story for everyone—and everything—who can't see pixels.";
   } else {
     DOM.altTextInput.value = originalAltText;

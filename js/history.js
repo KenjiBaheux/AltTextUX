@@ -53,8 +53,9 @@ export class AltTextHistory {
     }
 
     // Now push the AI result as a NEW "loading" entry
+    // If we have a hint, we start with it so the UI doesn't flicker to empty
     this.currentIndex++;
-    this.stack.splice(this.currentIndex, 0, { text: "", isAI: true, isLoading: true });
+    this.stack.splice(this.currentIndex, 0, { text: hintTrimmed, isAI: true, isLoading: true });
     
     // Ensure we don't exceed max size, but preserve the 0th empty entry
     while (this.stack.length > this.maxSize) {
@@ -66,7 +67,7 @@ export class AltTextHistory {
       }
     }
     
-    console.log(`History: prepareForAI inserted loading version at ${this.currentIndex}. Total: ${this.stack.length}`);
+    console.log(`History: prepareForAI inserted loading version at ${this.currentIndex} with text "${hintTrimmed}". Total: ${this.stack.length}`);
     this.applyCurrent();
   }
 
@@ -87,8 +88,9 @@ export class AltTextHistory {
   }
 
   cancelAI() {
-    if (this.currentIndex >= 0 && this.stack[this.currentIndex] && this.stack[this.currentIndex].isLoading) {
-      console.log(`History: cancelAI removing loading entry at ${this.currentIndex}`);
+    const current = this.stack[this.currentIndex];
+    if (this.currentIndex >= 0 && current && (current.isLoading || (current.isAI && current.text === "" && this.currentIndex > 0))) {
+      console.log(`History: cancelAI removing entry at ${this.currentIndex} (loading: ${current.isLoading}, empty AI: ${current.text === ""})`);
       this.stack.splice(this.currentIndex, 1);
       this.currentIndex--;
       
