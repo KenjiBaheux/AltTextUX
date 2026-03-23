@@ -17,7 +17,7 @@ export async function ensureImageLoaded(imageSource) {
   return true;
 }
 
-export async function typeWriterEffect(text) {
+export async function typeWriterEffect(text, signal = null) {
   if (!state.settings.enableTransitions) {
     DOM.altTextInput.value = text;
     return;
@@ -39,6 +39,9 @@ export async function typeWriterEffect(text) {
 
   let i = 0;
   while (i < text.length) {
+    if (signal && signal.aborted) {
+      break;
+    }
     const char = text.charAt(i);
     const isSpace = char === ' ';
 
@@ -80,7 +83,7 @@ export async function typeWriterEffect(text) {
   state.isAnimating = false;
 }
 
-export async function rewriteTextEffect(element, newText, fast = false) {
+export async function rewriteTextEffect(element, newText, fast = false, signal = null) {
   if (!state.settings.enableTransitions) {
     element.value = newText;
     notifyBTS('morph');
@@ -97,6 +100,9 @@ export async function rewriteTextEffect(element, newText, fast = false) {
   element.value = '';
 
   for (let i = 0; i < maxLength; i++) {
+    if (signal && signal.aborted) {
+      break;
+    }
     // Determine the current state of the text
     let currentText = [];
 

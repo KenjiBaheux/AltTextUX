@@ -38,8 +38,7 @@ export class AltTextHistory {
     this.updateUI();
   }
 
-  pushAIResult(aiText, userHint) {
-    const aiTrimmed = aiText.trim();
+  prepareForAI(userHint) {
     const hintTrimmed = userHint ? userHint.trim() : "";
 
     // If there's a user hint, ensure the current index captures the user's hint before we push the AI result
@@ -53,24 +52,63 @@ export class AltTextHistory {
         }
     }
 
-    // Now push the AI result as a NEW entry
-    // Preserve future, insert immediately after current position
+    // Now push the AI result as a NEW "loading" entry
+    // If we have a hint, we start with it so the UI doesn't flicker to empty
     this.currentIndex++;
-    this.stack.splice(this.currentIndex, 0, { text: aiTrimmed, isAI: true });
+    this.stack.splice(this.currentIndex, 0, { text: hintTrimmed, isAI: true, isLoading: true });
     
     // Ensure we don't exceed max size, but preserve the 0th empty entry
     while (this.stack.length > this.maxSize) {
       if (this.stack.length > 1) {
-        // Remove the oldest entry that is not the 0th entry
         this.stack.splice(1, 1);
         this.currentIndex--;
       } else {
-        break; // Should never happen unless maxSize is < 2
+        break;
       }
     }
     
-    console.log(`History: pushAIResult inserted version ${this.stack.length}. Current index: ${this.currentIndex}`);
+    console.log(`History: prepareForAI inserted loading version at ${this.currentIndex} with text "${hintTrimmed}". Total: ${this.stack.length}`);
+    this.applyCurrent();
+  }
+
+  finalizeAI(finalText) {
+    if (this.currentIndex < 0 || !this.stack[this.currentIndex] || !this.stack[this.currentIndex].isLoading) {
+      // Fallback: if somehow we aren't in a loading state, just push it
+      this.push(finalText, true);
+      return;
+    }
+
+    const trimmed = finalText.trim();
+    this.stack[this.currentIndex].text = trimmed;
+    this.stack[this.currentIndex].isLoading = false;
+    this.stack[this.currentIndex].isAI = true;
+
+    console.log(`History: finalizeAI updated index ${this.currentIndex} with result.`);
     this.updateUI();
+  }
+
+  cancelAI() {
+    const current = this.stack[this.currentIndex];
+    if (this.currentIndex >= 0 && current && (current.isLoading || (current.isAI && current.text === "" && this.currentIndex > 0))) {
+      console.log(`History: cancelAI removing entry at ${this.currentIndex} (loading: ${current.isLoading}, empty AI: ${current.text === ""})`);
+      this.stack.splice(this.currentIndex, 1);
+      this.currentIndex--;
+      
+      // Ensure we have at least one entry
+      if (this.stack.length === 0) {
+        this.push("", false);
+      } else if (this.currentIndex < 0) {
+        this.currentIndex = 0;
+      }
+      
+      this.applyCurrent();
+    }
+  }
+
+  pushAIResult(aiText, userHint) {
+    // Deprecated in favor of prepareForAI/finalizeAI flow, but kept for compatibility if needed
+    this.prepareForAI(userHint);
+    this.finalizeAI(aiText);
   }
 
   updateCurrent(text, isAI = false) {

@@ -2,7 +2,7 @@ import { DOM } from './js/dom.js';
 import { state } from './js/state.js';
 import { history } from './js/history.js';
 import { setupBTSEventListeners, setBTSState, notifyBTS } from './js/bts.js';
-import { checkAIAvailability, triggerModelDownload, cleanupAISession, prewarmWithSampleImage, startProactiveGeneration, generateAltText, prepareAISession } from './js/ai.js';
+import { checkAIAvailability, triggerModelDownload, cleanupAISession, prewarmWithSampleImage, startProactiveGeneration, generateAltText, prepareAISession, abortGeneration } from './js/ai.js';
 import { handleFileSelected, showPreview, hidePreview, updateShareButtonState, handleShareClick, closeSuccessOverlay, updateGenerateButtonUI, handleSmartFallback } from './js/ui.js';
 import { handleAppShare, generateICSReminder } from './js/actions.js';
 
@@ -79,14 +79,14 @@ function setupEventListeners() {
 
     history.clear();
     history.push("", false);
-    state.lastGeneratedAltText = ""; 
+    state.lastGeneratedAltText = "";
     showPreview();
     triggerModelDownload();
     state.wasAltTextManuallyCleared = false;
   });
 
   DOM.removeBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
 
     if (state.prewarmAbortController) {
       state.prewarmAbortController.abort();
@@ -139,7 +139,12 @@ function setupEventListeners() {
 
     if (history.currentIndex >= 0 && history.stack[history.currentIndex]) {
       const currentEntry = history.stack[history.currentIndex];
-      if (currentEntry.isAI || history.currentIndex === 0) {
+      const isErasing = rawInput.trim() === "";
+
+      if (isErasing) {
+        // Rule 4 (amended): If the user erases an entry, don't make a copy. Overwrite current so it can be purged.
+        history.updateCurrent(rawInput, false);
+      } else if (currentEntry.isAI || history.currentIndex === 0) {
         history.push(rawInput, false);
       } else {
         history.updateCurrent(rawInput, false);
@@ -149,7 +154,7 @@ function setupEventListeners() {
 
   DOM.altTextInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault(); 
+      e.preventDefault();
       if (DOM.generateBtn.classList.contains('error-state')) {
         // Flash the status badge and shake the icon to indicate failure
         DOM.statusBadge.classList.remove('badge-error-flash');
@@ -177,25 +182,37 @@ function setupEventListeners() {
         notifyBTS('versioning', 'pulse');
       }
     }
+
+    if (e.key === 'Escape') {
+      if (state.isGenerating || state.isAnimating) {
+        abortGeneration();
+      }
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && (state.isGenerating || state.isAnimating)) {
+      abortGeneration();
+    }
   });
 
   DOM.generateBtn.addEventListener('click', (e) => {
     if (DOM.generateBtn.classList.contains('error-state')) {
       e.preventDefault();
-      
+
       // Flash the status badge when clicked in an error state
       DOM.statusBadge.classList.remove('badge-error-flash');
-      
+
       // Also shake the icon
       const icon = DOM.generateBtn.querySelector('svg:not(.hidden)');
       if (icon) icon.classList.remove('icon-shake');
 
       // Trigger a reflow to restart the animation
       void DOM.statusBadge.offsetWidth;
-      
+
       DOM.statusBadge.classList.add('badge-error-flash');
       if (icon) icon.classList.add('icon-shake');
-      
+
       return;
     }
     generateAltText();
@@ -261,12 +278,24 @@ async function init() {
   setBTSState('welcome');
 
   if (state.aiAvailable && !DOM.imagePreview.src.includes('data:')) {
-    if (prewarmWithSampleImage()) {
-      notifyBTS('prewarm');
-    } else if (!state.sampleImageAltText) {
-      notifyBTS('proactive-1');
+    try {
+      if (prewarmWithSampleImage()) {
+        notifyBTS('prewarm');
+      } else if (!state.sampleImageAltText) {
+        notifyBTS('proactive-1');
+      }
+    } catch (e) {
+      console.error("Failed to start prewarming:", e);
     }
   }
 }
+
+// Safety net for any AI promises that might escape local catch blocks
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason && (event.reason.name === 'UnknownError' || event.reason.name === 'InvalidStateError')) {
+    console.warn("Caught unhandled AI rejection:", event.reason);
+    event.preventDefault(); // Prevent console noise if we're handling it
+  }
+});
 
 init();

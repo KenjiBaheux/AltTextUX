@@ -7,6 +7,38 @@ import { typeWriterEffect, rewriteTextEffect, LoadingMessageManager, ensureImage
 import { recordInferenceStart, recordInferenceDuration, consumeSavings, clearUnconsumedSavings, recordLossStart, recordLossEnd } from './metrics.js';
 import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI, showProgressUI, hideProgressUI, triggerDoubleTakeAnimation, showErrorState, showUnavailableState, clearErrorState } from './ui.js';
 
+function handleAIError(error, context, originalAltText = null) {
+  if (error.name === 'AbortError') {
+    return; // Don't show error UI for user-initiated aborts
+  }
+
+  console.error(`AI Error in ${context}:`, error);
+
+  const isTransient = error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed')) || (error.name === 'UnknownError' && error.message.includes('generic failures occurred'));
+  
+  if (isTransient) {
+    state.aiSession = null;
+    state.aiSessionPromise = null;
+  }
+
+  showErrorState(originalAltText);
+}
+
+function validateAIInput(imageSource, hint = "") {
+  if (!imageSource) {
+    throw new Error("InvalidStateError: No image source provided.");
+  }
+  if (imageSource instanceof HTMLImageElement) {
+    if (imageSource.naturalWidth === 0) {
+      throw new Error("InvalidStateError: Image source is not usable (naturalWidth is 0).");
+    }
+  }
+  if (hint !== null && typeof hint !== 'string' && typeof hint !== 'undefined') {
+    throw new Error("InvalidStateError: Hint must be a string.");
+  }
+  return true;
+}
+
 export async function checkAIAvailability() {
   if (!window.LanguageModel) {
     updateStatus('unavailable', 'AI API not found');
@@ -174,9 +206,8 @@ export async function prepareAISession(forceNew = false) {
         }
 
         console.error("Failed to create session after retries", error);
-        updateStatus('unavailable', 'Failed to load model');
-        showUnavailableState();
         state.aiSessionPromise = null; // Reset so next call can retry
+        handleAIError(error, "prepareAISession");
         throw error;
       }
     }
@@ -259,6 +290,13 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
   const session = await prepareAISession();
   if (!session) return;
 
+  try {
+    validateAIInput(targetImageSource, normalizedHint);
+  } catch (e) {
+    handleAIError(e, "startProactiveGeneration");
+    return;
+  }
+
   state.inferenceAbortController = new AbortController();
   state.activeInferenceHint = normalizedHint;
   state.currentProactiveImageSrc = targetImageSource;
@@ -300,9 +338,9 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
       return result;
     } catch (error) {
       notifyBTS(normalizedHint ? 'guidance' : 'proactive-1', 'end');
-      // Ignore abort errors
+      
       if (error.name !== 'AbortError') {
-        console.error("Proactive generation failed:", error);
+        handleAIError(error, "startProactiveGeneration");
       }
       if (state.unconsumedSavings && state.unconsumedSavings.type === metricType && !state.unconsumedSavings.duration) {
         clearUnconsumedSavings();
@@ -332,6 +370,13 @@ export async function prewarmWithSampleImage() {
   const session = await prepareAISession();
   if (!session) return;
 
+  try {
+    validateAIInput(DOM.sampleImageSource);
+  } catch (e) {
+    handleAIError(e, "prewarmWithSampleImage");
+    return;
+  }
+
   state.prewarmAbortController = new AbortController();
   console.log("BTS: Starting Warm-up Lap with sample image.");
   notifyBTS('prewarm');
@@ -358,7 +403,7 @@ export async function prewarmWithSampleImage() {
     } catch (error) {
       notifyBTS('prewarm', 'end');
       if (error.name !== 'AbortError') {
-        console.error("Warm-up Lap failed:", error);
+        handleAIError(error, "prewarmWithSampleImage");
       }
       if (state.unconsumedSavings && state.unconsumedSavings.type === 'prewarm' && !state.unconsumedSavings.duration) {
         clearUnconsumedSavings();
@@ -375,6 +420,10 @@ export async function prewarmWithSampleImage() {
 }
 
 export async function generateAltText() {
+  if (state.isGenerating) {
+    abortGeneration();
+    return;
+  }
   if (!state.currentImageSource || !state.aiAvailable) return;
 
   state.wasAltTextManuallyCleared = false;
@@ -386,26 +435,30 @@ export async function generateAltText() {
   state.originalAltText = (currentEntry && currentEntry.isAI && rawInput === currentEntry.text) ? "" : rawInput;
 
   // Rule 2 & 3: Generate and Refine always insert a new entry.
-  // We handle the shimmer visually without hacking the history stack in ai.js.
-  // history.js will handle the actual stack manipulation.
+  // We handle the shimmer visually by pushing a loading entry right away.
+  history.prepareForAI(state.originalAltText);
 
-  if (state.originalAltText) {
-    DOM.altTextInput.classList.add('text-shimmer');
-  }
-
+  // After preparing, the new entry is current and contains the original text if refining.
+  DOM.altTextInput.classList.add('text-shimmer');
   clearErrorState();
 
-  DOM.generateBtn.disabled = true;
   DOM.altTextInput.disabled = true;
   const currentIcon = state.originalAltText ? DOM.iconEnhance : DOM.iconSparkle;
   if (currentIcon) currentIcon.classList.add('icon-hidden-transition');
 
   state.isGenerating = true;
   updateShareButtonState();
+  updateGenerateButtonUI();
   history.updateUI(); // Lock history navigation buttons
   notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'start');
 
   DOM.generateLoader.classList.remove('hidden');
+
+  if (state.generationAbortController) {
+    state.generationAbortController.abort();
+  }
+  state.generationAbortController = new AbortController();
+  const signal = state.generationAbortController.signal;
 
   let loadingManager = null;
   if (!state.originalAltText) {
@@ -499,7 +552,8 @@ export async function generateAltText() {
       }
 
       try {
-        resultText = await clone.prompt([{ role: "user", content: promptMessage }]);
+        validateAIInput(state.currentImageSource, state.originalAltText);
+        resultText = await clone.prompt([{ role: "user", content: promptMessage }], { signal });
       } finally {
         recordLossEnd();
         clone.destroy();
@@ -514,10 +568,20 @@ export async function generateAltText() {
 
     if (remainingDelay > 0) {
       notifyBTS('temporal');
-      await new Promise(resolve => setTimeout(resolve, remainingDelay));
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(resolve, remainingDelay);
+        signal.addEventListener('abort', () => {
+          clearTimeout(timeout);
+          reject(new DOMException("AbortError", "AbortError"));
+        }, { once: true });
+      });
     } else {
       state.temporal.latestDelay = 0;
       updateTemporalLatestUI();
+    }
+
+    if (signal.aborted) {
+      throw new DOMException("AbortError", "AbortError");
     }
 
     if (loadingManager) {
@@ -529,7 +593,8 @@ export async function generateAltText() {
     if (existingIndex !== -1) {
       console.log(`History: Match found for AI generated text at index ${existingIndex}. Triggering Double-Take.`);
 
-      // Navigate history to the existing matching entry
+      // If we found a match, remove the loading entry and go to the match
+      history.cancelAI();
       history.currentIndex = existingIndex;
       history.applyCurrent();
 
@@ -537,7 +602,7 @@ export async function generateAltText() {
         "Nailed it, twice!",
         "Still perfection.",
         "Encore!",
-        "I’m my own favorite.",
+        "I'm my own favorite.",
         "Deja vu?",
         "Staying on message.",
         "Cache hit!",
@@ -555,8 +620,8 @@ export async function generateAltText() {
       startProactiveGeneration(resultText, null, true);
 
     } else {
-      // Insert the new AI generated text into history
-      history.pushAIResult(resultText, state.originalAltText);
+      // Update the current loading entry with the final AI result
+      history.finalizeAI(resultText);
 
       state.lastGeneratedAltText = resultText;
 
@@ -564,34 +629,36 @@ export async function generateAltText() {
 
       if (state.originalAltText && DOM.altTextInput.classList.contains('text-shimmer')) {
         DOM.altTextInput.classList.remove('text-shimmer');
-        await rewriteTextEffect(DOM.altTextInput, resultText);
+        await rewriteTextEffect(DOM.altTextInput, resultText, false, signal);
       } else {
         DOM.altTextInput.classList.remove('text-dimming');
-        await typeWriterEffect(resultText);
+        await typeWriterEffect(resultText, signal);
+      }
+
+      // If the animation was aborted, sync the partial output to history so it doesn't "snap" to full result on return
+      if (signal && signal.aborted) {
+        history.updateCurrent(DOM.altTextInput.value, true);
       }
     }
-
   } catch (error) {
-    if (error.name === 'AbortError') return;
-
-    console.error("Generation error:", error);
-
-    if (error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed'))) {
-      state.aiSession = null;
+    if (error.name === 'AbortError') {
+      console.log("Generation aborted by user");
+      history.cancelAI();
+      return;
     }
 
-    showErrorState(state.originalAltText);
+    handleAIError(error, "generateAltText", state.originalAltText);
   } finally {
     if (loadingManager) {
       loadingManager.stop();
     }
     DOM.altTextInput.classList.remove('text-shimmer');
     DOM.altTextInput.classList.remove('text-dimming');
-    DOM.generateBtn.disabled = false;
     DOM.altTextInput.disabled = false;
     DOM.generateLoader.classList.add('hidden');
-    updateGenerateButtonUI();
     state.isGenerating = false;
+    state.generationAbortController = null;
+    updateGenerateButtonUI();
     updateShareButtonState();
     history.updateUI(); // Unlock history navigation buttons
 
@@ -602,6 +669,13 @@ export async function generateAltText() {
     }
 
     notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'end');
+  }
+}
+
+export function abortGeneration() {
+  if (state.generationAbortController) {
+    state.generationAbortController.abort();
+    state.generationAbortController = null;
   }
 }
 

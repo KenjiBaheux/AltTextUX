@@ -106,6 +106,13 @@ export function updateGenerateButtonUI(targetText = null) {
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const shortcut = isMac ? '(Cmd+Enter)' : '(Ctrl+Enter)';
 
+  if (state.isGenerating) {
+    DOM.generateBtn.classList.add('loading');
+    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = "Abort task (Esc)";
+    return;
+  }
+  DOM.generateBtn.classList.remove('loading');
+
   const currentEntry = history.stack[history.currentIndex];
   const isUserEdit = currentEntry && !currentEntry.isAI && history.currentIndex > 0;
   const textToCheck = targetText !== null ? targetText : DOM.altTextInput.value;
@@ -123,7 +130,7 @@ export function updateGenerateButtonUI(targetText = null) {
       DOM.iconSparkle.classList.remove('icon-hidden-transition');
       DOM.iconSparkle.classList.remove('hidden');
     }
-    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = `Generate with AI ${shortcut}`;
+    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = `Draft a story with AI ${shortcut}`;
   }
 }
 
@@ -218,6 +225,7 @@ export async function handleSmartFallback() {
 
     state.isGenerating = true;
     updateShareButtonState();
+    history.updateUI();
     state.lastGeneratedAltText = fallbackText;
 
     notifyBTS('fallback', 'pulse');
@@ -232,6 +240,7 @@ export async function handleSmartFallback() {
 
     state.isGenerating = false;
     updateShareButtonState();
+    history.updateUI();
   }
 }
 
@@ -305,7 +314,7 @@ export function showErrorState(originalAltText) {
   updateStatus('error', 'AI Failed');
   DOM.altTextInput.parentElement.classList.add('error-caution');
 
-  if (originalAltText === "") {
+  if (!originalAltText) {
     DOM.altTextInput.placeholder = "Even AI can't see these pixels. Tell the story for everyone—and everything—who can't see pixels.";
   } else {
     DOM.altTextInput.value = originalAltText;
