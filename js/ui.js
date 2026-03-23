@@ -130,7 +130,7 @@ export function updateGenerateButtonUI(targetText = null) {
       DOM.iconSparkle.classList.remove('icon-hidden-transition');
       DOM.iconSparkle.classList.remove('hidden');
     }
-    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = `Generate with AI ${shortcut}`;
+    if (DOM.aiBtnTooltip) DOM.aiBtnTooltip.textContent = `Draft a story with AI ${shortcut}`;
   }
 }
 
