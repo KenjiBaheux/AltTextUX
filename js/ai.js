@@ -10,7 +10,7 @@ import { typeWriterEffect, rewriteTextEffect, LoadingMessageManager, ensureImage
 import { recordInferenceStart, recordInferenceDuration, consumeSavings, clearUnconsumedSavings, recordLossStart, recordLossEnd } from './metrics.js';
 import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI, showProgressUI, hideProgressUI, triggerDoubleTakeAnimation, showErrorState, showUnavailableState, clearErrorState } from './ui.js';
 
-function handleAIError(error, context, originalAltText = null) {
+function handleAIError(error, context, originalAltText = null, isSpeculative = false) {
   if (error.name === 'AbortError') {
     return; // Don't show error UI for user-initiated aborts
   }
@@ -26,6 +26,11 @@ function handleAIError(error, context, originalAltText = null) {
     cleanupAISession();
     state.aiSession = null;
     state.aiSessionPromise = null;
+
+    if (isSpeculative) {
+      console.warn(`Silently handled transient error for speculative task in ${context}`);
+      return;
+    }
   }
 
   showErrorState(originalAltText);
@@ -70,7 +75,7 @@ export async function checkAIAvailability() {
         updateStatus('available', 'AI Ready');
         state.aiAvailable = true;
         updateGenerateButtonState();
-        prepareAISession(); // Pre-warm the session
+        prepareAISession().catch(e => handleAIError(e, "checkAIAvailability_prewarm", null, true)); // Pre-warm the session
         break;
       case 'downloadable':
         updateStatus('downloadable', 'Model Ready to Download');
@@ -213,7 +218,6 @@ export async function prepareAISession(forceNew = false) {
 
         console.error("Failed to create session after retries", error);
         state.aiSessionPromise = null; // Reset so next call can retry
-        handleAIError(error, "prepareAISession");
         throw error;
       }
     }
@@ -225,7 +229,7 @@ export async function prepareAISession(forceNew = false) {
 export function triggerModelDownload() {
   const isActionable = DOM.statusBadge.classList.contains('status-downloadable') || DOM.statusBadge.classList.contains('status-downloading');
   if (!state.aiSession && state.aiAvailable && isActionable) {
-    prepareAISession().catch(e => console.error("Background download failed", e));
+    prepareAISession().catch(e => handleAIError(e, "triggerModelDownload", null, true));
   }
 }
 
@@ -282,7 +286,7 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
     }
   }, { force: false, speculative: true }).catch(error => { // Proactive matches speculative nature
     if (error.name !== 'AbortError') {
-      handleAIError(error, "startProactiveGeneration");
+      handleAIError(error, "startProactiveGeneration", null, true);
     }
   });
 
@@ -336,7 +340,7 @@ export async function prewarmWithSampleImage() {
     }
   }, { force: false, speculative: true }).catch(error => {  // Prewarm is speculative
     if (error.name !== 'AbortError') {
-      handleAIError(error, "prewarmWithSampleImage");
+      handleAIError(error, "prewarmWithSampleImage", null, true);
     }
   });
 
