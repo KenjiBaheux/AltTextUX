@@ -17,9 +17,13 @@ function handleAIError(error, context, originalAltText = null) {
 
   console.error(`AI Error in ${context}:`, error);
 
-  const isTransient = error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed')) || (error.name === 'UnknownError' && error.message.includes('generic failures occurred'));
-  
+  const transientUnknownErrorKeywords = ['generic failures occurred', 'unknown error occurred: kErrorUnknown'];
+  const isTransient = error.name === 'InvalidStateError'
+    || (error.message && error.message.includes('destroyed'))
+    || (error.name === 'UnknownError' && transientUnknownErrorKeywords.some(keyword => error.message.includes(keyword)));
+
   if (isTransient) {
+    cleanupAISession();
     state.aiSession = null;
     state.aiSessionPromise = null;
   }
@@ -75,7 +79,6 @@ export async function checkAIAvailability() {
         break;
       case 'downloading':
         updateStatus('downloading', 'Checking AI Model...');
-        // In a real app we might monitor progress when create() is called
         state.aiAvailable = true;
         updateGenerateButtonState();
 
