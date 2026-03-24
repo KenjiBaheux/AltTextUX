@@ -213,6 +213,16 @@ function setupEventListeners() {
       DOM.statusBadge.classList.add('badge-error-flash');
       if (icon) icon.classList.add('icon-shake');
 
+      if (state.isModelDownloading || DOM.statusBadge.classList.contains('status-requires-gesture') || DOM.statusBadge.classList.contains('status-downloading') || DOM.statusBadge.classList.contains('status-downloadable')) {
+        DOM.statusBadge.classList.remove('icon-shake');
+        void DOM.statusBadge.offsetWidth;
+        DOM.statusBadge.classList.add('icon-shake');
+
+        DOM.progressContainer.classList.remove('icon-shake');
+        void DOM.progressContainer.offsetWidth;
+        DOM.progressContainer.classList.add('icon-shake');
+      }
+
       return;
     }
     generateAltText();

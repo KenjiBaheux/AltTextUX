@@ -11,8 +11,9 @@ import { recordInferenceStart, recordInferenceDuration, consumeSavings, clearUnc
 import { updateStatus, updateGenerateButtonState, updateShareButtonState, updateGenerateButtonUI, showProgressUI, hideProgressUI, triggerDoubleTakeAnimation, showErrorState, showUnavailableState, clearErrorState } from './ui.js';
 
 function handleAIError(error, context, originalAltText = null) {
-  if (error.name === 'AbortError') {
-    return; // Don't show error UI for user-initiated aborts
+  const isNotAllowed = error.name === 'NotAllowedError' || (error.message && error.message.includes('NotAllowedError'));
+  if (error.name === 'AbortError' || isNotAllowed) {
+    return; // Don't show error UI for user-initiated aborts or missing user gesture
   }
 
   console.error(`AI Error in ${context}:`, error);
@@ -79,9 +80,6 @@ export async function checkAIAvailability() {
         state.aiAvailable = true;
         updateGenerateButtonState();
 
-        // Show progress bar container immediately
-        showProgressUI();
-
         // Polling workaround for Chrome restoration bug & slow connections
         if (!state.availabilityPollInterval) {
           state.availabilityPollInterval = setInterval(async () => {
@@ -99,13 +97,16 @@ export async function checkAIAvailability() {
                 state.availabilityPollInterval = null;
                 console.log(`Chrome component update finished or bug resolved. Status is now: ${currentStatus}`);
 
-                // Force bar to 100% completion for mental model consistency before hiding
-                showProgressUI(100);
-
-                setTimeout(() => {
-                  hideProgressUI();
-                  checkAIAvailability(); // Re-run with the properly resolved state
-                }, 500);
+                // Check if progress UI is currently visible before forcing 100%
+                if (DOM.progressContainer && DOM.progressContainer.classList.contains('show')) {
+                  showProgressUI(100);
+                  setTimeout(() => {
+                    hideProgressUI();
+                    checkAIAvailability(); // Re-run with the properly resolved state
+                  }, 500);
+                } else {
+                  checkAIAvailability(); // Re-run quietly if no bar was shown
+                }
               }
             } catch (e) {
               clearInterval(state.availabilityPollInterval);
@@ -154,27 +155,30 @@ export async function prepareAISession(forceNew = false) {
             let progressEventsCount = 0;
             m.addEventListener('downloadprogress', (e) => {
               progressEventsCount++;
-              state.isModelDownloading = true; // Legitimately downloading!
 
-              if (e.loaded < e.total && progressEventsCount > 3) {
-                showProgressUI();
+              if (progressEventsCount > 3) {
+                state.isModelDownloading = true; // Legitimately downloading!
 
-                // Only update the label to "Downloading" if we prove we're getting real bytes
-                updateStatus('downloading', 'Downloading AI Model...');
+                if (e.loaded < e.total) {
+                  showProgressUI();
+                  // Only update the label to "Downloading" if we prove we're getting real bytes
+                  updateStatus('downloading', 'Downloading AI Model...');
 
-                // Ensure badge is visible so they see the downloading label
-                if (!state.isBadgeResolved) {
-                  state.isBadgeResolved = true;
-                  const container = document.querySelector('.status-badge-container');
-                  if (container) container.classList.add('resolved');
+                  // Ensure badge is visible so they see the downloading label
+                  if (!state.isBadgeResolved) {
+                    state.isBadgeResolved = true;
+                    const container = document.querySelector('.status-badge-container');
+                    if (container) container.classList.add('resolved');
+                  }
                 }
-              }
-              if (e.total) {
-                const percent = e.total ? Math.round((e.loaded / e.total) * 100) : 0;
-                showProgressUI(percent);
 
-                if (percent >= 100) {
-                  hideProgressUI(500);
+                if (e.total) {
+                  const percent = e.total ? Math.round((e.loaded / e.total) * 100) : 0;
+                  showProgressUI(percent);
+
+                  if (percent >= 100) {
+                    hideProgressUI(500);
+                  }
                 }
               }
             });
@@ -193,11 +197,21 @@ export async function prepareAISession(forceNew = false) {
             { type: "text", languages: ["en"] }
           ]
         });
+        state.isModelDownloading = false;
         state.aiSession = session;
 
         updateStatus('available', 'AI Ready');
         return session;
       } catch (error) {
+        state.isModelDownloading = false;
+        
+        const isNotAllowed = error.name === 'NotAllowedError' || (error.message && error.message.includes('NotAllowedError'));
+        if (isNotAllowed) {
+          updateStatus('requires-gesture', 'Initialize AI');
+          state.aiSessionPromise = null;
+          throw error;
+        }
+
         attempt++;
         const isTransient = error.name === 'InvalidStateError' || (error.message && error.message.includes('destroyed'));
 
@@ -220,8 +234,11 @@ export async function prepareAISession(forceNew = false) {
 }
 
 export function triggerModelDownload() {
-  const isActionable = DOM.statusBadge.classList.contains('status-downloadable') || DOM.statusBadge.classList.contains('status-downloading');
+  const isActionable = DOM.statusBadge.classList.contains('status-downloadable') || DOM.statusBadge.classList.contains('status-downloading') || DOM.statusBadge.classList.contains('status-requires-gesture');
   if (!state.aiSession && state.aiAvailable && isActionable) {
+    if (DOM.statusBadge.classList.contains('status-requires-gesture')) {
+      updateStatus('downloading', 'Checking AI Model...');
+    }
     prepareAISession().catch(e => console.error("Background download failed", e));
   }
 }

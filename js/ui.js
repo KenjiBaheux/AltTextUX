@@ -45,7 +45,7 @@ export function updateStatus(stateStr, text) {
     }
   }
 
-  if (stateStr === 'error' || stateStr === 'unavailable') {
+  if (stateStr === 'error' || stateStr === 'unavailable' || stateStr === 'downloading' || stateStr === 'downloadable' || stateStr === 'requires-gesture') {
     DOM.generateBtn.classList.add('error-state');
   } else {
     DOM.generateBtn.classList.remove('error-state');

@@ -54,5 +54,11 @@ export const DOM = {
   metricLabelProactive: document.getElementById('metric-label-proactive'),
   metricProactive: document.getElementById('metric-proactive'),
   metricLabelProactive2: document.getElementById('metric-label-proactive2'),
-  metricProactive2: document.getElementById('metric-proactive2')
+  metricProactive2: document.getElementById('metric-proactive2'),
+  progressContainer: document.getElementById('progress-container'),
+  progressFill: document.getElementById('progress-fill'),
+  progressPercent: document.getElementById('progress-percent'),
+  statusTextSpan: document.getElementById('status-text'),
+  errorIcon: document.getElementById('error-info-icon'),
+  unavailableIcon: document.getElementById('unavailable-info-icon')
 };
