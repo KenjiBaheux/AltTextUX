@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { notifyBTS, setBTSState } from './bts.js';
 import { consumeSavings } from './metrics.js';
 import { history } from './history.js';
-import { prepareAISession, startProactiveGeneration } from './ai.js';
+import { prepareAISession, startProactiveGeneration, getSmartFallbackData, consumeSmartFallback } from './ai.js';
 import { typeWriterEffect } from './utils.js';
 
 export function updateStatus(stateStr, text) {
@@ -190,26 +190,24 @@ export async function handleSmartFallback() {
   if (DOM.altTextInput.value.trim() !== "") return;
 
   let fallbackText = "";
+  const fallbackData = getSmartFallbackData(state.currentImageSource, "");
 
-  if (state.cachedAltText) {
-    console.log("BTS: Smart Fallback - Rescuing from local cache.");
-    fallbackText = state.cachedAltText;
-
-    // Track time saved
-    consumeSavings();
-
-    state.cachedAltText = "";
-    state.cachedHint = null;
-  }
-  else if (state.activeInferencePromise) {
-    console.log("BTS: Smart Fallback - Waiting for in-flight inference.");
-
-    // Track time saved
-    consumeSavings();
-
-    fallbackText = await state.activeInferencePromise;
-    state.cachedAltText = "";
-    state.cachedHint = null;
+  if (fallbackData) {
+    if (fallbackData.type === 'cached') {
+      console.log("BTS: Smart Fallback - Rescuing from local cache.");
+      fallbackText = fallbackData.result;
+      consumeSavings();
+    } else if (fallbackData.type === 'promise') {
+      console.log("BTS: Smart Fallback - Waiting for in-flight inference.");
+      consumeSavings();
+      try {
+        const result = await fallbackData.promise;
+        fallbackText = result.result || result; // Based on what executor returns
+      } catch (e) {
+        console.warn("Smart Fallback inference failed or aborted:", e);
+      }
+    }
+    consumeSmartFallback(state.currentImageSource, "");
   }
 
   if (fallbackText && DOM.altTextInput.value.trim() === "") {

@@ -36,6 +36,7 @@ export class AltTextHistory {
     
     console.log(`History: Pushed version ${this.stack.length}. Current index: ${this.currentIndex}`);
     this.updateUI();
+    this._pulseIndex();
   }
 
   prepareForAI(userHint) {
@@ -69,6 +70,7 @@ export class AltTextHistory {
     
     console.log(`History: prepareForAI inserted loading version at ${this.currentIndex} with text "${hintTrimmed}". Total: ${this.stack.length}`);
     this.applyCurrent();
+    this._pulseIndex();
   }
 
   finalizeAI(finalText) {
@@ -102,6 +104,7 @@ export class AltTextHistory {
       }
       
       this.applyCurrent();
+      this._pulseIndex();
     }
   }
 
@@ -176,7 +179,11 @@ export class AltTextHistory {
 
     // Use the fast morph effect for history navigation
     if (DOM.altTextInput.value !== text) {
-      rewriteTextEffect(DOM.altTextInput, text, true);
+      if (text === "") {
+        DOM.altTextInput.value = "";
+      } else {
+        rewriteTextEffect(DOM.altTextInput, text, true);
+      }
     }
   }
 
@@ -184,6 +191,14 @@ export class AltTextHistory {
     this.stack = [];
     this.currentIndex = -1;
     this.updateUI();
+  }
+
+  _pulseIndex() {
+    if (DOM.historyIndex) {
+      DOM.historyIndex.classList.remove('history-index-pulse');
+      void DOM.historyIndex.offsetWidth; // trigger reflow
+      DOM.historyIndex.classList.add('history-index-pulse');
+    }
   }
 
   updateUI() {
