@@ -1,5 +1,8 @@
 import { DOM } from './dom.js';
 import { state } from './state.js';
+import { AltTextAITaskOrchestrator } from './orchestrator.js';
+
+const engine = new AltTextAITaskOrchestrator();
 import { PROMPTS } from './prompts.js';
 import { history } from './history.js';
 import { notifyBTS, updateTemporalLatestUI } from './bts.js';
@@ -237,128 +240,59 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
     return;
   }
 
-  // Normalize hint: if the current text is an AI entry, it's not a user refinement
   const currentEntry = history.stack[history.currentIndex];
   const normalizedHint = (currentEntry && currentEntry.isAI && hint === currentEntry.text) ? "" : hint;
 
-  // OPTIMIZATION: In-Flight Prewarm Adoption
-  if (state.prewarmPromise && targetImageSource === DOM.sampleImageSource && normalizedHint === "") {
-    console.log("BTS: Adopting in-flight Warm-up Lap.");
-    state.activeInferenceHint = "";
-    state.currentProactiveImageSrc = targetImageSource;
-    state.activeInferencePromise = state.prewarmPromise.then(result => {
-      state.cachedAltText = result;
-      state.cachedHint = "";
-      state.activeInferencePromise = null;
-      state.activeInferenceHint = null;
-      return result;
-    });
-    return state.activeInferencePromise;
-  }
-
-  // Abort any ongoing prewarming if we are starting unrelated real work
-  if (state.prewarmAbortController) {
-    console.log("BTS: Aborting Warm-up Lap for real workload.");
-    state.prewarmAbortController.abort();
-    state.prewarmAbortController = null;
-    state.prewarmPromise = null;
-  }
-
-  // If we're requesting the sample image and it's already pre-cached, use it!
-  if (targetImageSource === DOM.sampleImageSource && state.sampleImageAltText) {
-    console.log("BTS: Sample Image cache hit from Warm-up Lap.");
-    state.cachedAltText = state.sampleImageAltText;
-    state.cachedHint = "";
-    state.currentProactiveImageSrc = targetImageSource;
-
-    // Consume the pre-cache so a fresh one can be generated for the next journey
-    state.sampleImageAltText = "";
-    return Promise.resolve(state.cachedAltText);
-  }
-
-  // Don't restart if we are already fulfilling this exact request
-  if (state.activeInferencePromise && state.activeInferenceHint === normalizedHint && state.currentProactiveImageSrc === targetImageSource) return;
-
-  // Don't restart if we already have it cached
-  if (state.cachedAltText && state.cachedHint === normalizedHint && state.currentProactiveImageSrc === targetImageSource) return;
-
-  // If there's an active inference doing something else, abort it
-  if (state.inferenceAbortController) {
-    state.inferenceAbortController.abort();
-    state.inferenceAbortController = null;
-  }
-  const session = await prepareAISession();
-  if (!session) return;
-
-  try {
+  const promise = engine.execute(targetImageSource, normalizedHint, async (signal) => {
+    const session = await prepareAISession();
+    if (!session) throw new Error("No session");
+    
     validateAIInput(targetImageSource, normalizedHint);
-  } catch (e) {
-    handleAIError(e, "startProactiveGeneration");
-    return;
-  }
+    const clone = await session.clone();
+    
+    const promptMessage = [{ type: "image", value: targetImageSource }];
+    if (normalizedHint) {
+      promptMessage.push({ type: "text", value: PROMPTS.USER_GUIDANCE(normalizedHint) });
+    } else {
+      promptMessage.push({ type: "text", value: PROMPTS.USER_DEFAULT });
+    }
 
-  state.inferenceAbortController = new AbortController();
-  state.activeInferenceHint = normalizedHint;
-  state.currentProactiveImageSrc = targetImageSource;
+    const btsType = isProactive2 ? 'proactive-2' : (normalizedHint ? 'guidance' : 'proactive-1');
+    notifyBTS(btsType, 'start');
+    const metricType = isProactive2 ? 'proactive2' : 'proactive';
+    recordInferenceStart(metricType);
 
-  // Utilize session cloning for a fresh baseline
-  const clone = await session.clone();
-
-  const promptMessage = [
-    { type: "image", value: targetImageSource },
-  ];
-
-  if (normalizedHint) {
-    promptMessage.push({
-      type: "text",
-      value: PROMPTS.USER_GUIDANCE(normalizedHint)
-    });
-  } else {
-    promptMessage.push({
-      type: "text",
-      value: PROMPTS.USER_DEFAULT
-    });
-  }
-
-  const btsType = isProactive2 ? 'proactive-2' : (normalizedHint ? 'guidance' : 'proactive-1');
-  notifyBTS(btsType, 'start');
-
-  const metricType = isProactive2 ? 'proactive2' : 'proactive';
-  recordInferenceStart(metricType);
-
-  state.activeInferencePromise = (async () => {
     try {
-      const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal: state.inferenceAbortController.signal });
+      const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal });
       const duration = performance.now() - state.inferenceStartTimes.get(metricType);
       recordInferenceDuration(metricType, duration);
-
-      state.cachedAltText = result;
-      state.cachedHint = normalizedHint;
       notifyBTS(btsType, 'end');
       return result;
     } catch (error) {
-      notifyBTS(normalizedHint ? 'guidance' : 'proactive-1', 'end');
-      
-      if (error.name !== 'AbortError') {
-        handleAIError(error, "startProactiveGeneration");
-      }
+      notifyBTS(btsType, 'end');
       if (state.unconsumedSavings && state.unconsumedSavings.type === metricType && !state.unconsumedSavings.duration) {
         clearUnconsumedSavings();
       }
       throw error;
     } finally {
-      state.activeInferencePromise = null;
-      state.activeInferenceHint = null;
-      clone.destroy(); // Cleanup clone
+      clone.destroy();
     }
-  })();
+  }, { force: false, speculative: true }).catch(error => { // Proactive matches speculative nature
+    if (error.name !== 'AbortError') {
+      handleAIError(error, "startProactiveGeneration");
+    }
+  });
 
-  return state.activeInferencePromise;
+  return promise;
 }
 
 export async function prewarmWithSampleImage() {
   if (!state.settings.enablePrewarming) return false;
-  if (!state.aiAvailable || !DOM.sampleImageSource || state.sampleImageAltText || state.prewarmAbortController) return false;
+  if (!state.aiAvailable || !DOM.sampleImageSource) return false;
+
+  // With mapping, checking ongoing tasks is handled elegantly, we check if one is running for this exact key
+  if (engine.ongoingTasks.has(engine._getKey(DOM.sampleImageSource, ""))) return false;
+  if (engine.hasCache(DOM.sampleImageSource, "")) return false;
 
   try {
     await ensureImageLoaded(DOM.sampleImageSource);
@@ -367,56 +301,43 @@ export async function prewarmWithSampleImage() {
     return false;
   }
 
-  const session = await prepareAISession();
-  if (!session) return;
-
-  try {
+  engine.execute(DOM.sampleImageSource, "", async (signal) => {
+    const session = await prepareAISession();
+    if (!session) throw new Error("No session");
     validateAIInput(DOM.sampleImageSource);
-  } catch (e) {
-    handleAIError(e, "prewarmWithSampleImage");
-    return;
-  }
 
-  state.prewarmAbortController = new AbortController();
-  console.log("BTS: Starting Warm-up Lap with sample image.");
-  notifyBTS('prewarm');
+    notifyBTS('prewarm');
+    const clone = await session.clone();
 
-  const clone = await session.clone();
+    const promptMessage = [
+      { type: "image", value: DOM.sampleImageSource },
+      { type: "text", value: PROMPTS.USER_DEFAULT }
+    ];
 
-  const promptMessage = [
-    { type: "image", value: DOM.sampleImageSource },
-    { type: "text", value: PROMPTS.USER_DEFAULT }
-  ];
+    recordInferenceStart('prewarm');
 
-  recordInferenceStart('prewarm');
-
-  state.prewarmPromise = (async () => {
     try {
-      const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal: state.prewarmAbortController.signal });
+      const result = await clone.prompt([{ role: "user", content: promptMessage }], { signal });
       const duration = performance.now() - state.inferenceStartTimes.get('prewarm');
       recordInferenceDuration('prewarm', duration);
-
-      state.sampleImageAltText = result;
-      console.log("BTS: Warm-up Lap complete. Sample image alt text cached.");
       notifyBTS('prewarm', 'end');
       return result;
     } catch (error) {
       notifyBTS('prewarm', 'end');
-      if (error.name !== 'AbortError') {
-        handleAIError(error, "prewarmWithSampleImage");
-      }
       if (state.unconsumedSavings && state.unconsumedSavings.type === 'prewarm' && !state.unconsumedSavings.duration) {
         clearUnconsumedSavings();
       }
       throw error;
     } finally {
       clone.destroy();
-      state.prewarmAbortController = null;
-      state.prewarmPromise = null;
     }
-  })();
+  }, { force: false, speculative: true }).catch(error => {  // Prewarm is speculative
+    if (error.name !== 'AbortError') {
+      handleAIError(error, "prewarmWithSampleImage");
+    }
+  });
 
-  return true; // Work started
+  return true;
 }
 
 export async function generateAltText() {
@@ -427,21 +348,13 @@ export async function generateAltText() {
   if (!state.currentImageSource || !state.aiAvailable) return;
 
   state.wasAltTextManuallyCleared = false;
-
   const rawInput = DOM.altTextInput.value.trim();
-
-  // If the current text is an AI entry from history, we shouldn't treat it as a user hint
   const currentEntry = history.stack[history.currentIndex];
   state.originalAltText = (currentEntry && currentEntry.isAI && rawInput === currentEntry.text) ? "" : rawInput;
 
-  // Rule 2 & 3: Generate and Refine always insert a new entry.
-  // We handle the shimmer visually by pushing a loading entry right away.
   history.prepareForAI(state.originalAltText);
-
-  // After preparing, the new entry is current and contains the original text if refining.
   DOM.altTextInput.classList.add('text-shimmer');
   clearErrorState();
-
   DOM.altTextInput.disabled = true;
   const currentIcon = state.originalAltText ? DOM.iconEnhance : DOM.iconSparkle;
   if (currentIcon) currentIcon.classList.add('icon-hidden-transition');
@@ -449,7 +362,7 @@ export async function generateAltText() {
   state.isGenerating = true;
   updateShareButtonState();
   updateGenerateButtonUI();
-  history.updateUI(); // Lock history navigation buttons
+  history.updateUI(); 
   notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'start');
 
   DOM.generateLoader.classList.remove('hidden');
@@ -467,7 +380,6 @@ export async function generateAltText() {
   }
 
   let resultText = "";
-
   const requestTimestamp = performance.now();
   const minD = state.temporal.minDelay;
   const maxD = state.temporal.maxDelay;
@@ -480,55 +392,25 @@ export async function generateAltText() {
       throw new Error("Simulated AI Failure");
     }
 
-    if (state.cachedAltText && state.cachedHint === state.originalAltText) {
-      // Record time saved from consumption
-      consumeSavings();
-
-      resultText = state.cachedAltText;
-
-      state.cachedAltText = "";
-      state.cachedHint = null;
-    }
-    else if (state.activeInferencePromise && state.activeInferenceHint === state.originalAltText) {
-      consumeSavings();
-
-      resultText = await state.activeInferencePromise;
-    }
-    else {
-      if (state.inferenceAbortController) {
-        state.inferenceAbortController.abort();
-        state.inferenceAbortController = null;
-      }
-      state.activeInferencePromise = null;
-      state.activeInferenceHint = null;
+    // A real user-invoked generation is NOT speculative. It aborts unmatching prior ongoing inferences!
+    const prediction = await engine.execute(state.currentImageSource, state.originalAltText, async (engineSignal) => {
+      // Setup listener to bridge UI abort to engine abort
+      const onUiAbort = () => engine.abort();
+      signal.addEventListener('abort', onUiAbort, { once: true });
 
       clearUnconsumedSavings();
-
-      try {
-        await ensureImageLoaded(state.currentImageSource);
-      } catch (e) {
-        throw new Error("InvalidStateError: The image source is not usable.");
-      }
-
+      await ensureImageLoaded(state.currentImageSource);
+      
       const session = await prepareAISession();
-      if (!session) return;
-
+      if (!session) throw new Error("No AI Session");
+      validateAIInput(state.currentImageSource, state.originalAltText);
       const clone = await session.clone();
 
-      const promptMessage = [
-        { type: "image", value: state.currentImageSource },
-      ];
-
+      const promptMessage = [{ type: "image", value: state.currentImageSource }];
       if (state.originalAltText) {
-        promptMessage.push({
-          type: "text",
-          value: PROMPTS.USER_GUIDANCE(state.originalAltText)
-        });
+        promptMessage.push({ type: "text", value: PROMPTS.USER_GUIDANCE(state.originalAltText) });
       } else {
-        promptMessage.push({
-          type: "text",
-          value: PROMPTS.USER_DEFAULT
-        });
+        promptMessage.push({ type: "text", value: PROMPTS.USER_DEFAULT });
       }
 
       let lostTrickType = null;
@@ -547,21 +429,22 @@ export async function generateAltText() {
         }
       }
 
-      if (lostTrickType) {
-        recordLossStart(lostTrickType);
-      }
+      if (lostTrickType) recordLossStart(lostTrickType);
 
       try {
-        validateAIInput(state.currentImageSource, state.originalAltText);
-        resultText = await clone.prompt([{ role: "user", content: promptMessage }], { signal });
+        return await clone.prompt([{ role: "user", content: promptMessage }], { signal: engineSignal });
       } finally {
         recordLossEnd();
         clone.destroy();
+        signal.removeEventListener('abort', onUiAbort);
       }
+    });
 
-      state.cachedAltText = resultText;
-      state.cachedHint = state.originalAltText;
+    if (prediction.type === 'cached' || prediction.type === 'adopted') {
+      consumeSavings();
     }
+    resultText = prediction.result;
+    engine.consume(state.currentImageSource, state.originalAltText);
 
     const elapsed = performance.now() - requestTimestamp;
     const remainingDelay = targetDelay - elapsed;
@@ -592,39 +475,23 @@ export async function generateAltText() {
 
     if (existingIndex !== -1) {
       console.log(`History: Match found for AI generated text at index ${existingIndex}. Triggering Double-Take.`);
-
-      // If we found a match, remove the loading entry and go to the match
       history.cancelAI();
       history.currentIndex = existingIndex;
       history.applyCurrent();
 
       const WITTY_MESSAGES = [
-        "Nailed it, twice!",
-        "Still perfection.",
-        "Encore!",
-        "I'm my own favorite.",
-        "Deja vu?",
-        "Staying on message.",
-        "Cache hit!",
-        "Consistency is key.",
-        "Why change a classic?",
-        "Great minds think alike.",
-        "Too good to change.",
-        "If it ain't broke..."
+        "Nailed it, twice!", "Still perfection.", "Encore!", "I'm my own favorite.",
+        "Deja vu?", "Staying on message.", "Cache hit!", "Consistency is key.",
+        "Why change a classic?", "Great minds think alike.", "Too good to change.", "If it ain't broke..."
       ];
-
       const wittyMessage = WITTY_MESSAGES[Math.floor(Math.random() * WITTY_MESSAGES.length)];
       triggerDoubleTakeAnimation(wittyMessage);
 
       state.lastGeneratedAltText = resultText;
       startProactiveGeneration(resultText, null, true);
-
     } else {
-      // Update the current loading entry with the final AI result
       history.finalizeAI(resultText);
-
       state.lastGeneratedAltText = resultText;
-
       startProactiveGeneration(resultText, null, true);
 
       if (state.originalAltText && DOM.altTextInput.classList.contains('text-shimmer')) {
@@ -635,9 +502,21 @@ export async function generateAltText() {
         await typeWriterEffect(resultText, signal);
       }
 
-      // If the animation was aborted, sync the partial output to history so it doesn't "snap" to full result on return
       if (signal && signal.aborted) {
-        history.updateCurrent(DOM.altTextInput.value, true);
+        if (state.originalAltText) {
+          // Unwind the rewriting and delete the entry if it was a refine task
+          history.stack.splice(history.currentIndex, 1);
+          history.currentIndex--;
+          if (history.stack.length === 0) {
+            history.push("", false);
+          } else if (history.currentIndex < 0) {
+            history.currentIndex = 0;
+          }
+          history.applyCurrent();
+        } else {
+          // Stop midway if it was a Draft task
+          history.updateCurrent(DOM.altTextInput.value, true);
+        }
       }
     }
   } catch (error) {
@@ -646,7 +525,6 @@ export async function generateAltText() {
       history.cancelAI();
       return;
     }
-
     handleAIError(error, "generateAltText", state.originalAltText);
   } finally {
     if (loadingManager) {
@@ -660,14 +538,13 @@ export async function generateAltText() {
     state.generationAbortController = null;
     updateGenerateButtonUI();
     updateShareButtonState();
-    history.updateUI(); // Unlock history navigation buttons
+    history.updateUI();
 
     const isUserDrafting = (document.activeElement === DOM.postContent);
     if (!isUserDrafting) {
       DOM.altTextInput.focus();
       DOM.altTextInput.setSelectionRange(0, 0);
     }
-
     notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'end');
   }
 }
@@ -678,6 +555,7 @@ export function abortGeneration() {
     state.generationAbortController = null;
   }
 }
+
 
 export function cleanupAISession() {
   if (state.aiSession) {
@@ -690,4 +568,21 @@ export function cleanupAISession() {
     }
     state.aiSession = null;
   }
+}
+
+
+export function getSmartFallbackData(imageSource, hint = "") {
+  if (!imageSource) return null;
+  const key = engine._getKey(imageSource, hint);
+  if (engine.hasCache(imageSource, hint)) {
+    return { type: "cached", result: engine.getCachedResult(imageSource, hint) };
+  }
+  if (engine.ongoingTasks.has(key)) {
+    return { type: "promise", promise: engine.ongoingTasks.get(key).promise };
+  }
+  return null;
+}
+
+export function consumeSmartFallback(imageSource, hint = "") {
+  engine.consume(imageSource, hint);
 }

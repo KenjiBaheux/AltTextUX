@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prediction Engine Tests</title>
+    <style>
+        body { font-family: monospace; background: #111; color: #eee; padding: 2rem; }
+        .pass { color: #10b981; }
+        .fail { color: #ef4444; }
+        .header { margin-top: 1rem; color: #a5b4fc; }
+    </style>
+</head>
+<body>
+    <h1>Running AltTextAITaskOrchestrator Tests...</h1>
+    <div id="log"></div>
+
+    <script type="module">
+        import { AltTextAITaskOrchestrator } from '../js/orchestrator.js';
+        
+        const logEl = document.getElementById('log');
+        function log(msg, className='') {
+            const d = document.createElement('div');
+            d.innerHTML = msg;
+            if (className) d.className = className;
+            logEl.appendChild(d);
+        }
+
+        // Mock node assert
+        const assert = {
+            strictEqual: (a, b, msg) => {
+                if (a !== b) throw new Error(`${msg ? msg + ' - ' : ''}Expected ${b} but got ${a}`);
+            },
+            ok: (a, msg) => {
+                if (!a) throw new Error(`${msg ? msg + ' - ' : ''}Expected truthy value`);
+            }
+        };
+
+        function createMockExecutor(resultText, msDelay = 50) {
+            return async (signal) => {
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => resolve(resultText), msDelay);
+                    if (signal) {
+                        signal.addEventListener('abort', () => {
+                            clearTimeout(timeout);
+                            const err = new Error("AbortError");
+                            err.name = "AbortError";
+                            reject(err);
+                        });
+                    }
+                });
+            };
+        }
+
+        async function runTests() {
+            let passed = 0;
+            let failed = 0;
+
+            function testHeader(name) {
+                log(`\n--- Test: ${name} ---`, 'header');
+            }
+
+            try {
+                testHeader("Fresh prediction executes and caches");
+                const engine = new AltTextAITaskOrchestrator();
+                const result1 = await engine.execute("img1", "hint1", createMockExecutor("res1", 10));
+                assert.strictEqual(result1.type, "fresh");
+                assert.strictEqual(result1.result, "res1");
+                assert.strictEqual(engine.hasCache("img1", "hint1"), true);
+                passed++;
+                log("PASS", "pass");
+            } catch(e) { log(`FAIL: ${e.message}`, "fail"); failed++; }
+
+            try {
+                testHeader("Multi-Cache Tracks Distinct Predictions");
+                const engine = new AltTextAITaskOrchestrator();
+                await engine.execute("img1", "hint1", createMockExecutor("res1", 10));
+                await engine.execute("img2", "hint2", createMockExecutor("res2", 10));
+                
+                assert.strictEqual(engine.hasCache("img1", "hint1"), true);
+                assert.strictEqual(engine.hasCache("img2", "hint2"), true);
+                assert.strictEqual(engine.getCachedResult("img1", "hint1"), "res1");
+                assert.strictEqual(engine.getCachedResult("img2", "hint2"), "res2");
+                passed++;
+                log("PASS", "pass");
+            } catch(e) { log(`FAIL: ${e.message}`, "fail"); failed++; }
+
+            try {
+                testHeader("Forced execution bypasses Cache/Adoption");
+                const engine = new AltTextAITaskOrchestrator();
+                await engine.execute("img1", "hint1", createMockExecutor("res1", 10));
+                
+                // Forced should not read cache
+                const forcedReq = await engine.execute("img1", "hint1", createMockExecutor("res_forced", 10), { force: true });
+                assert.strictEqual(forcedReq.type, "fresh");
+                assert.strictEqual(forcedReq.result, "res_forced");
+                
+                // It should push over the cache with the newest though!
+                assert.strictEqual(engine.getCachedResult("img1", "hint1"), "res_forced");
+                passed++;
+                log("PASS", "pass");
+            } catch(e) { log(`FAIL: ${e.message}`, "fail"); failed++; }
+
+            try {
+                testHeader("Concurrent tasks don't indiscriminately abort (One-step-ahead)");
+                const engine = new AltTextAITaskOrchestrator();
+                
+                const p1 = engine.execute("img1", "hint1", createMockExecutor("res1", 50), { speculative: true });
+                const p2 = engine.execute("img2", "hint2", createMockExecutor("res2", 50), { speculative: true });
+                
+                const res = await Promise.all([p1, p2]);
+                assert.strictEqual(res[0].result, "res1");
+                assert.strictEqual(res[1].result, "res2");
+                assert.strictEqual(engine.hasCache("img1", "hint1"), true);
+                assert.strictEqual(engine.hasCache("img2", "hint2"), true);
+                passed++;
+                log("PASS", "pass");
+            } catch(e) { log(`FAIL: ${e.message}`, "fail"); failed++; }
+
+            try {
+                testHeader("Consumption clears only the specific cache");
+                const engine5 = new AltTextAITaskOrchestrator();
+                await engine5.execute("img1", "hint1", createMockExecutor("res1", 10));
+                await engine5.execute("img2", "hint2", createMockExecutor("res2", 10));
+                
+                engine5.consume("img1", "hint1");
+                // img1 is cleared, img2 remains
+                assert.strictEqual(engine5.hasCache("img1", "hint1"), false);
+                assert.strictEqual(engine5.hasCache("img2", "hint2"), true);
+                
+                // Next request for img1 should be fresh
+                const nextReq = await engine5.execute("img1", "hint1", createMockExecutor("res_new", 10));
+                assert.strictEqual(nextReq.type, "fresh");
+                assert.strictEqual(nextReq.result, "res_new");
+                passed++;
+                log("PASS", "pass");
+            } catch(e) { log(`FAIL: ${e.message}`, "fail"); failed++; }
+
+            log(`\n============================`, 'header');
+            log(`Tests Run: ${passed + failed}`);
+            log(`Passed: ${passed}`, 'pass');
+            if (failed > 0) log(`Failed: ${failed}`, 'fail');
+            log(`============================`, 'header');
+        }
+
+        runTests();
+    </script>
+</body>
+</html>
