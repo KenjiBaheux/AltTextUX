@@ -190,7 +190,7 @@ export async function handleSmartFallback() {
   if (DOM.altTextInput.value.trim() !== "") return;
 
   let fallbackText = "";
-  const fallbackData = getSmartFallbackData(state.currentImageSource, "");
+  const fallbackData = await getSmartFallbackData(state.currentImageSource, "");
 
   if (fallbackData) {
     if (fallbackData.type === 'cached') {
@@ -207,7 +207,7 @@ export async function handleSmartFallback() {
         console.warn("Smart Fallback inference failed or aborted:", e);
       }
     }
-    consumeSmartFallback(state.currentImageSource, "");
+    await consumeSmartFallback(state.currentImageSource, "");
   }
 
   if (fallbackText && DOM.altTextInput.value.trim() === "") {
@@ -227,6 +227,9 @@ export async function handleSmartFallback() {
     state.lastGeneratedAltText = fallbackText;
 
     notifyBTS('fallback', 'pulse');
+
+    // Proactively generate another draft to be ready for the next "Draft a story" request
+    startProactiveGeneration();
 
     if (DOM.iconSparkle) DOM.iconSparkle.classList.add('glitter-animation');
 

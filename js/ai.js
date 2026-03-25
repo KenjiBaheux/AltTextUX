@@ -15,10 +15,16 @@ function handleAIError(error, context, originalAltText = null, isSpeculative = f
     return; // Don't show error UI for user-initiated aborts
   }
 
-  console.error(`AI Error in ${context}:`, error);
+  // Only log as error if it's not speculative, otherwise log as warning
+  if (isSpeculative) {
+    console.warn(`AI (Speculative) Error in ${context}:`, error);
+  } else {
+    console.error(`AI Error in ${context}:`, error);
+  }
 
-  const transientUnknownErrorKeywords = ['generic failures occurred', 'unknown error occurred: kErrorUnknown'];
+  const transientUnknownErrorKeywords = ['generic failures occurred', 'unknown error occurred: kErrorUnknown', 'QuotaExceededError'];
   const isTransient = error.name === 'InvalidStateError'
+    || error.name === 'QuotaExceededError'
     || (error.message && error.message.includes('destroyed'))
     || (error.name === 'UnknownError' && transientUnknownErrorKeywords.some(keyword => error.message.includes(keyword)));
 
@@ -26,11 +32,12 @@ function handleAIError(error, context, originalAltText = null, isSpeculative = f
     cleanupAISession();
     state.aiSession = null;
     state.aiSessionPromise = null;
+  }
 
-    if (isSpeculative) {
-      console.warn(`Silently handled transient error for speculative task in ${context}`);
-      return;
-    }
+  // For speculative tasks, we never want to show an error state to the user
+  if (isSpeculative) {
+    console.warn(`Silently handled transient error for speculative task in ${context}`);
+    return;
   }
 
   showErrorState(originalAltText);
@@ -251,12 +258,15 @@ export async function startProactiveGeneration(hint = "", imageSrcOverride = nul
   const normalizedHint = (currentEntry && currentEntry.isAI && hint === currentEntry.text) ? "" : hint;
 
   const promise = engine.execute(targetImageSource, normalizedHint, async (signal) => {
-    const session = await prepareAISession();
+    // Crucially, if there's an ongoing session creation, we MUST wait for it.
+    // However, if we are in showPreview, prepareAISession(true) was just called. 
+    // We want to make sure we don't start the prompt before the session is ready.
+    const session = await (state.aiSessionPromise || prepareAISession());
     if (!session) throw new Error("No session");
-    
+
     validateAIInput(targetImageSource, normalizedHint);
     const clone = await session.clone();
-    
+
     const promptMessage = [{ type: "image", value: targetImageSource }];
     if (normalizedHint) {
       promptMessage.push({ type: "text", value: PROMPTS.USER_GUIDANCE(normalizedHint) });
@@ -298,8 +308,8 @@ export async function prewarmWithSampleImage() {
   if (!state.aiAvailable || !DOM.sampleImageSource) return false;
 
   // With mapping, checking ongoing tasks is handled elegantly, we check if one is running for this exact key
-  if (engine.ongoingTasks.has(engine._getKey(DOM.sampleImageSource, ""))) return false;
-  if (engine.hasCache(DOM.sampleImageSource, "")) return false;
+  if (engine.ongoingTasks.has(await engine._getKey(DOM.sampleImageSource, ""))) return false;
+  if (await engine.hasCache(DOM.sampleImageSource, "")) return false;
 
   try {
     await ensureImageLoaded(DOM.sampleImageSource);
@@ -370,7 +380,7 @@ export async function generateAltText() {
   state.isGenerating = true;
   updateShareButtonState();
   updateGenerateButtonUI();
-  history.updateUI(); 
+  history.updateUI();
   notifyBTS(state.originalAltText ? 'guidance' : 'chameleon', 'start');
 
   DOM.generateLoader.classList.remove('hidden');
@@ -408,7 +418,7 @@ export async function generateAltText() {
 
       clearUnconsumedSavings();
       await ensureImageLoaded(state.currentImageSource);
-      
+
       const session = await prepareAISession();
       if (!session) throw new Error("No AI Session");
       validateAIInput(state.currentImageSource, state.originalAltText);
@@ -452,7 +462,7 @@ export async function generateAltText() {
       consumeSavings();
     }
     resultText = prediction.result;
-    engine.consume(state.currentImageSource, state.originalAltText);
+    await engine.consume(state.currentImageSource, state.originalAltText);
 
     const elapsed = performance.now() - requestTimestamp;
     const remainingDelay = targetDelay - elapsed;
@@ -496,11 +506,9 @@ export async function generateAltText() {
       triggerDoubleTakeAnimation(wittyMessage);
 
       state.lastGeneratedAltText = resultText;
-      startProactiveGeneration(resultText, null, true);
     } else {
       history.finalizeAI(resultText);
       state.lastGeneratedAltText = resultText;
-      startProactiveGeneration(resultText, null, true);
 
       if (state.originalAltText && DOM.altTextInput.classList.contains('text-shimmer')) {
         DOM.altTextInput.classList.remove('text-shimmer');
@@ -528,6 +536,9 @@ export async function generateAltText() {
         }
       }
     }
+
+    // Only trigger proactive tasks once the result is finalized or matched
+    startProactiveGeneration(resultText, null, true);
   } catch (error) {
     if (error.name === 'AbortError') {
       console.log("Generation aborted by user");
@@ -581,11 +592,11 @@ export function cleanupAISession() {
 }
 
 
-export function getSmartFallbackData(imageSource, hint = "") {
+export async function getSmartFallbackData(imageSource, hint = "") {
   if (!imageSource) return null;
-  const key = engine._getKey(imageSource, hint);
-  if (engine.hasCache(imageSource, hint)) {
-    return { type: "cached", result: engine.getCachedResult(imageSource, hint) };
+  const key = await engine._getKey(imageSource, hint);
+  if (await engine.hasCache(imageSource, hint)) {
+    return { type: "cached", result: await engine.getCachedResult(imageSource, hint) };
   }
   if (engine.ongoingTasks.has(key)) {
     return { type: "promise", promise: engine.ongoingTasks.get(key).promise };
@@ -593,6 +604,6 @@ export function getSmartFallbackData(imageSource, hint = "") {
   return null;
 }
 
-export function consumeSmartFallback(imageSource, hint = "") {
-  engine.consume(imageSource, hint);
+export async function consumeSmartFallback(imageSource, hint = "") {
+  await engine.consume(imageSource, hint);
 }
