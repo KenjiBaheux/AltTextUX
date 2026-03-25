@@ -361,6 +361,7 @@ export async function generateAltText() {
 
   history.prepareForAI(state.originalAltText);
   DOM.altTextInput.classList.add('text-shimmer');
+  DOM.imagePreviewWrapper?.classList.add('image-scanning');
   clearErrorState();
   DOM.altTextInput.disabled = true;
   const currentIcon = state.originalAltText ? DOM.iconEnhance : DOM.iconSparkle;
@@ -503,6 +504,7 @@ export async function generateAltText() {
 
       if (state.originalAltText && DOM.altTextInput.classList.contains('text-shimmer')) {
         DOM.altTextInput.classList.remove('text-shimmer');
+        DOM.imagePreviewWrapper?.classList.remove('image-scanning');
         await rewriteTextEffect(DOM.altTextInput, resultText, false, signal);
       } else {
         DOM.altTextInput.classList.remove('text-dimming');
@@ -538,6 +540,7 @@ export async function generateAltText() {
       loadingManager.stop();
     }
     DOM.altTextInput.classList.remove('text-shimmer');
+    DOM.imagePreviewWrapper?.classList.remove('image-scanning');
     DOM.altTextInput.classList.remove('text-dimming');
     DOM.altTextInput.disabled = false;
     DOM.generateLoader.classList.add('hidden');

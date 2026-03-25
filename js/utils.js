@@ -173,6 +173,7 @@ export class LoadingMessageManager {
     // Add dimming and shimmer
     this.element.classList.add('text-dimming');
     this.element.classList.add('text-shimmer');
+    DOM.imagePreviewWrapper?.classList.add('image-scanning');
     
     // Delay first message by 600ms to avoid flashes on fast generation
     this.timer = setTimeout(() => {
@@ -201,6 +202,7 @@ export class LoadingMessageManager {
     
     this.element.classList.remove('text-dimming');
     this.element.classList.remove('text-shimmer');
+    DOM.imagePreviewWrapper?.classList.remove('image-scanning');
     
     // Only clear if the current value is still a loading message
     // (don't clear if it's already been set to the result)
