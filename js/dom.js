@@ -6,6 +6,7 @@ export const DOM = {
   sampleBtn: document.getElementById('sample-btn'),
   uploadContent: document.getElementById('upload-content'),
   previewContainer: document.getElementById('preview-container'),
+  imagePreviewWrapper: document.querySelector('.image-scanning-target'),
   imagePreview: document.getElementById('image-preview'),
   removeBtn: document.getElementById('remove-btn'),
   generateBtn: document.getElementById('generate-btn'),

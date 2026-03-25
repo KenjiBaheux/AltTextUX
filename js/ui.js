@@ -278,6 +278,7 @@ export function triggerDoubleTakeAnimation(wittyMessage) {
 
   DOM.altTextInput.classList.remove('text-wave');
   DOM.altTextInput.classList.remove('text-shimmer');
+  DOM.imagePreviewWrapper?.classList.remove('image-scanning');
   DOM.altTextInput.classList.remove('text-dimming');
   void DOM.altTextInput.offsetWidth; // trigger reflow
   DOM.altTextInput.classList.add('text-wave');
