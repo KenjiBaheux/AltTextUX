@@ -242,9 +242,6 @@ function setupEventListeners() {
 
   DOM.postContent.addEventListener('input', updateShareButtonState);
   DOM.postContent.addEventListener('focus', () => {
-    const currentText = DOM.altTextInput.value;
-    history.push(currentText, false);
-
     handleSmartFallback();
     setBTSState('composition');
   });
