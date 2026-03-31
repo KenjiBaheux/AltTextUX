@@ -22,6 +22,25 @@ function setupEventListeners() {
     triggerModelDownload();
   });
 
+  document.querySelectorAll('.info-icon').forEach(icon => {
+    icon.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const tooltip = icon.querySelector('.tooltip');
+      const isActive = tooltip.classList.contains('is-active');
+
+      document.querySelectorAll('.tooltip.is-active').forEach(t => t.classList.remove('is-active'));
+
+      if (!isActive) {
+        tooltip.classList.add('is-active');
+      }
+    });
+  });
+
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.tooltip.is-active').forEach(t => t.classList.remove('is-active'));
+  });
+
   const footerShareBtn = document.getElementById('footer-share-btn');
   if (footerShareBtn) {
     footerShareBtn.addEventListener('click', handleAppShare);

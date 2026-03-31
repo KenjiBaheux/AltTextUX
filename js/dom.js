@@ -1,5 +1,8 @@
 export const DOM = {
   statusBadge: document.getElementById('status-badge'),
+  statusTextSpan: document.getElementById('status-text'),
+  errorIcon: document.getElementById('error-info-icon'),
+  unavailableIcon: document.getElementById('unavailable-info-icon'),
   dropZone: document.getElementById('drop-zone'),
   imageUpload: document.getElementById('image-upload'),
   selectBtn: document.getElementById('select-btn'),

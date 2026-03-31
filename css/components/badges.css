@@ -195,6 +195,12 @@
   transform: translateY(0);
 }
 
+.info-icon .tooltip.is-active {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .tooltip strong {
   display: block;
   margin-bottom: 0.5rem;
@@ -208,6 +214,13 @@
 
 .tooltip li {
   margin-bottom: 0.25rem;
+}
+
+@media (max-width: 480px) {
+  .info-icon .tooltip {
+    width: 200px;
+    right: -50px;
+  }
 }
 
 /* Progress Bar */
@@ -254,4 +267,3 @@
   min-width: 42px;
   text-align: right;
 }
-
